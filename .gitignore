@@ -161,3 +161,7 @@ cython_debug/
 
 # Precommit hooks: ruff cache
 .ruff_cache
+
+# Données des cahiers (sous NDA) + dataset dérivé : jamais committées
+data/
+.DS_Store

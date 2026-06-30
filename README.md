@@ -1,7 +1,13 @@
-# Template DataForGood
+# Cahiers de doléances
 
-This file will become your README and also the index of your
-documentation.
+Analyse des cahiers de doléances (projet Data For Good).
+Un pipeline prépare les données, une app Gradio sert à sélectionner les contributions.
+
+## Organisation
+
+- `data_pipeline/` : prépare les données pour voir [data_pipeline/README.md](data_pipeline/README.md)
+- `gradio_app/` : interface de sélection des contributions pour voir [gradio_app/README.md](gradio_app/README.md)
+- `data/` : les données (non versionnées, sous NDA)
 
 # Contributing
 
@@ -27,7 +33,8 @@ source .venv/bin/activate
 Ou alors, utilisez la commande `uv run ...` (au lieu de `python ...`) pour lancer un script Python. Par exemple:
 
 ```bash
-uv run pipelines/run.py run build_database
+uv run python data_pipeline/pipeline.py # prépare les données
+uv run python gradio_app/app.py # lance l'app
 ```
 
 
