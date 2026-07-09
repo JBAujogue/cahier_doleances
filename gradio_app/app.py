@@ -1,10 +1,8 @@
 import gradio as gr
 from data_helpers import (
     PDF_DIR, get_contribution,
-    list_communes,list_contributions, save_decision
+    list_communes, list_contributions, save_annotation
 )
-
-DECISIONS = ["À traiter", "Gardée", "Rejetée"]
 
 def pdf_html(pdf_file: str | None) -> str:
     if not pdf_file:
@@ -19,22 +17,23 @@ def pdf_html(pdf_file: str | None) -> str:
     )
 
 def show(commune: str, idx: int):
-    """Affiche la contribution n°idx de la commune."""
     contribs = list_contributions(commune)
     idx = max(0, min(idx, len(contribs) - 1))
     c = get_contribution(commune, idx)
     return (
-        c["meta"],
         gr.update(choices=contribs, value=contribs[idx] if contribs else None),
+        c["analyse"],
         c["header"],
         c["text"],
         pdf_html(c["pdf_file"]),
+        c["is_anonymized"],
+        c["is_of_interest"],
         idx,
     )
 
 
 with gr.Blocks(title="Cahiers de doléances", theme=gr.themes.Soft()) as demo:
-    gr.Markdown("# Sélection des contributions")
+    gr.Markdown("# Visualisation des contributions")
     idx_state = gr.State(0)
 
     with gr.Row():
@@ -42,8 +41,8 @@ with gr.Blocks(title="Cahiers de doléances", theme=gr.themes.Soft()) as demo:
             commune = gr.Dropdown(
                 list_communes(), value=list_communes()[0], label="Commune", filterable=True
             )
-            meta = gr.Markdown()
             contrib = gr.Dropdown(label="Contribution", filterable=True)
+            analyse = gr.Markdown()
             with gr.Row():
                 prev_btn = gr.Button("Précédente")
                 next_btn = gr.Button("Suivante")
@@ -51,8 +50,8 @@ with gr.Blocks(title="Cahiers de doléances", theme=gr.themes.Soft()) as demo:
         with gr.Column(scale=2):
             header = gr.Markdown()
             text = gr.Textbox(label="Texte de la contribution", lines=18, interactive=False)
-            decision = gr.Radio(DECISIONS, value=DECISIONS[0], label="Décision")
-            note = gr.Textbox(label="Note (optionnel)", lines=2)
+            anonymized = gr.Checkbox(label="Anonymisé")
+            of_interest = gr.Checkbox(label="Contribution d'intérêt")
             save_btn = gr.Button("Enregistrer", variant="primary")
             status = gr.Markdown()
 
@@ -60,7 +59,7 @@ with gr.Blocks(title="Cahiers de doléances", theme=gr.themes.Soft()) as demo:
             gr.Markdown("#### PDF source")
             pdf = gr.HTML()
 
-    outputs = [meta, contrib, header, text, pdf, idx_state]
+    outputs = [contrib, analyse, header, text, pdf, anonymized, of_interest, idx_state]
 
     commune.change(lambda c: show(c, 0), commune, outputs)
     contrib.input(
@@ -70,7 +69,7 @@ with gr.Blocks(title="Cahiers de doléances", theme=gr.themes.Soft()) as demo:
     )
     prev_btn.click(lambda c, i: show(c, i - 1), [commune, idx_state], outputs)
     next_btn.click(lambda c, i: show(c, i + 1), [commune, idx_state], outputs)
-    save_btn.click(save_decision, [commune, idx_state, decision, note], status)
+    save_btn.click(save_annotation, [commune, idx_state, anonymized, of_interest], status)
 
     demo.load(lambda: show(list_communes()[0], 0), None, outputs)
 
