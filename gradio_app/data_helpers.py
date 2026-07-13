@@ -1,0 +1,129 @@
+import os
+from pathlib import Path
+
+import pandas as pd
+from dotenv import load_dotenv
+from sqlalchemy import create_engine, text
+from sqlalchemy.engine import URL
+
+# Constantes
+ROOT = Path(__file__).resolve().parent.parent
+PDF_DIR = ROOT / "data" / "raw" / "pdfs"
+
+load_dotenv(ROOT / ".env")
+engine = create_engine(
+    URL.create(
+        drivername="postgresql+psycopg2",
+        username=os.environ["DB_USER"],
+        password=os.environ["DB_PASSWORD"],
+        host=os.environ["DB_HOST"],
+        port=int(os.environ["DB_PORT"]),
+        database=os.environ["DB_NAME"],
+    ),
+    pool_pre_ping=True,
+)
+
+def list_communes() -> list[str]:
+    q = text("SELECT DISTINCT city FROM contribution ORDER BY city")
+    return pd.read_sql(q, engine)["city"].tolist()
+
+def _rows(commune: str) -> pd.DataFrame:
+    """Les contributions d'une commune."""
+    # une seule extraction affichée par contribution : la plus récente
+    q = text("""
+        SELECT k.id, k.city, k.pdf_file, k.start_page, k.end_page, k.is_handwritten,
+               e.ocr, e.text, e.num_words, e.num_lines,
+               a.is_anonymized, a.is_of_interest,
+               (SELECT string_agg(name, ', ') FROM topic
+                 WHERE contribution_id = k.id) AS topics,
+               (SELECT string_agg(name, ', ') FROM feeling
+                 WHERE contribution_id = k.id) AS feelings
+        FROM contribution k
+        LEFT JOIN extraction e ON e.id = (
+            SELECT max(id) FROM extraction WHERE contribution_id = k.id
+        )
+        LEFT JOIN annotation a ON a.contribution_id = k.id
+        WHERE k.city = :city
+        ORDER BY k.id
+    """)
+    return pd.read_sql(q, engine, params={"city": commune})
+
+def _int(value) -> str:
+    """Entier en texte, ou 'N/C' si manquant."""
+    return "N/C" if pd.isna(value) else str(int(value))
+
+def _text(value) -> str:
+    """Valeur texte, ou 'N/C' si manquante."""
+    return "N/C" if pd.isna(value) else str(value)
+
+def _bool(value) -> str:
+    """Booléen en texte ('oui'/'non'), ou 'N/C' si manquant."""
+    return "N/C" if pd.isna(value) else ("oui" if value else "non")
+
+def _pages(start, end) -> str:
+    """'2' ou '4-5', ou 'N/C' si manquant."""
+    if pd.isna(start):
+        return "N/C"
+    if pd.isna(end) or int(end) == int(start):
+        return str(int(start))
+    return f"{int(start)}-{int(end)}"
+
+def _nature(is_handwritten) -> str:
+    if pd.isna(is_handwritten):
+        return "N/C"
+    return "Manuscrit" if is_handwritten else "Dactylographié"
+
+def list_contributions(commune: str) -> list[str]:
+    rows = _rows(commune)
+    return [f"{i + 1}/{len(rows)} | {_nature(h)}" for i, h in enumerate(rows["is_handwritten"])]
+
+def get_contribution(commune: str, idx: int) -> dict:
+    rows = _rows(commune)
+    r = rows.iloc[idx]
+    return {
+        # bloc affiché à gauche, sous le select Contribution
+        "analyse": (
+            f"#### Analyse textuelle\n"
+            f"- Topics : {_text(r['topics'])}\n"
+            f"- Sentiment : {_text(r['feelings'])}\n"
+            f"- Anonymisé : {_bool(r['is_anonymized'])}\n"
+            f"- Contribution d'intérêt : {_bool(r['is_of_interest'])}"
+        ),
+        # provenance technique, au-dessus du résultat OCR
+        # (la nature Manuscrit/Dactylographié est déjà dans le libellé du dropdown)
+        "header": (
+            f"| Pages | Lignes | Mots | Extraction |\n"
+            f"|---|---|---|---|\n"
+            f"| {_pages(r['start_page'], r['end_page'])} | {_int(r['num_lines'])} "
+            f"| {_int(r['num_words'])} | {_text(r['ocr'])} |"
+        ),
+        "text": r["text"] if pd.notna(r["text"]) else "N/C (pas encore extraite)",
+        "pdf_file": r["pdf_file"],
+        # état d'annotation existant (le tien ou celui d'un autre bénévole)
+        "is_anonymized": bool(r["is_anonymized"]) if pd.notna(r["is_anonymized"]) else False,
+        "is_of_interest": bool(r["is_of_interest"]) if pd.notna(r["is_of_interest"]) else False,
+    }
+
+def save_annotation(commune: str, idx: int, is_anonymized: bool, is_of_interest: bool) -> str:
+    contribution_id = int(_rows(commune).iloc[idx]["id"])
+    with engine.begin() as conn: # begin = transaction, commit automatique
+        if not is_anonymized and not is_of_interest:
+            # plus rien d'activé : on supprime la ligne (contribution redevient vierge)
+            conn.execute(
+                text("DELETE FROM annotation WHERE contribution_id = :cid"),
+                {"cid": contribution_id},
+            )
+            return f"Annotation effacée (contribution {idx + 1})."
+        # UPSERT : insère, ou met à jour l'annotation existante
+        conn.execute(
+            text("""
+                INSERT INTO annotation (contribution_id, is_anonymized, is_of_interest)
+                VALUES (:cid, :anonymized, :of_interest)
+                ON CONFLICT (contribution_id) DO UPDATE
+                   SET is_anonymized = EXCLUDED.is_anonymized,
+                       is_of_interest = EXCLUDED.is_of_interest
+            """),
+            {"cid": contribution_id, "anonymized": is_anonymized,
+             "of_interest": is_of_interest},
+        )
+    return f"Enregistré (contribution {idx + 1})."
