@@ -1,20 +1,31 @@
 # App Gradio : visualisation et annotation
 
-Interface pour parcourir les contributions commune par commune (texte extrait + PDF source)
-et activer deux variables par contribution : **Anonymisé** et **Contribution d'intérêt**.
+Interface à deux onglets : **Par commune** — parcourir les contributions (texte extrait +
+PDF source) et activer deux variables par contribution (**Anonymisé**, **Contribution
+d'intérêt**) — et **Par thème** — consulter, en lecture seule, toutes les instances d'un
+thème : KPI (instances / contributions / communes), grille de cartes (document source,
+verbatim, résumé, sentiment) et répartition des thèmes sur tout le corpus.
 
 ## Fonctionnement
 
 Les données sont lues **directement dans la base PostgreSQL**, pas de fichier intermédiaire.
-Une contribution affiche : ses thèmes (instances `topic` reliées au référentiel
-`ref_topic`, avec verbatim et résumé quand l'analyse existe), ses sentiments (`feeling`),
-le texte de sa dernière extraction (`extraction`, `max(id)`), et son PDF (`data/raw/pdfs/`). Les deux
-cases cochées sont écrites dans la table `annotation` (UPSERT ; les deux décochées = ligne
-supprimée). Voir `database/README.md` pour le modèle.
+
+**Par commune** : une contribution affiche ses thèmes (instances `topic` reliées au
+référentiel `ref_topic`, avec verbatim et résumé quand l'analyse existe), ses sentiments
+(`feeling`), le texte de sa dernière extraction (`extraction`, `max(id)`), et son PDF
+(`data/raw/pdfs/`). Les deux cases cochées sont écrites dans la table `annotation`
+(UPSERT ; les deux décochées = ligne supprimée).
+
+**Par thème** : le dropdown liste la taxonomie `ref_topic` (avec le nombre d'instances,
+y compris à 0) ; chaque instance devient une carte reconstruite via `@gr.render`.
+Aucune écriture depuis cette vue. Voir `database/README.md` pour le modèle.
 
 | Fichier | Rôle |
 |---|---|
-| `app.py` | interface Gradio : mise en page, navigation, événements |
+| `app.py` | coquille : assemble les onglets, charge le CSS, lance l'app |
+| `views/commune.py` | onglet « Par commune » : navigation + annotation |
+| `views/topic.py` | onglet « Par thème » : KPI + cartes + répartition (lecture seule) |
+| `views/style.css` | styles des vues custom (classes `tv-*`), chargé via `css_paths` |
 | `data_helpers.py` | requêtes SQL (SQLAlchemy + pandas) et sauvegarde des annotations |
 
 ## Prérequis

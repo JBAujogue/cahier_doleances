@@ -27,6 +27,41 @@ def list_communes() -> list[str]:
     q = text("SELECT DISTINCT city FROM contribution ORDER BY city")
     return pd.read_sql(q, engine)["city"].tolist()
 
+def ref_topic_counts() -> pd.DataFrame:
+    """Nom + nombre d'instances par thème (dropdown et panneau de répartition)."""
+    # LEFT JOIN : un thème sans instance reste visible (taxonomie ≠ avancement)
+    q = text("""
+        SELECT r.name, count(t.id) AS n
+        FROM ref_topic r
+        LEFT JOIN topic t ON t.ref_topic_id = r.id
+        GROUP BY r.name
+        ORDER BY r.name
+    """)
+    return pd.read_sql(q, engine)
+
+def list_ref_topics() -> list[str]:
+    """Libellés du dropdown thème : 'fiscalité (4)'."""
+    return [f"{r.name} ({r.n})" for r in ref_topic_counts().itertuples()]
+
+def topic_rows(name: str) -> pd.DataFrame:
+    """Les instances d'un thème, jointes à leur contribution (vue 'Par thème')."""
+    q = text("""
+        SELECT k.city, k.pdf_file,
+               (SELECT count(*) FROM contribution k2
+                 WHERE k2.city = k.city AND k2.id <= k.id) AS pos,
+               (SELECT count(*) FROM contribution k3
+                 WHERE k3.city = k.city) AS total,
+               (SELECT string_agg(name, ', ') FROM feeling
+                 WHERE contribution_id = k.id) AS feelings,
+               t.verbatim, t.summary, t.contribution_id
+        FROM topic t
+        JOIN ref_topic r ON r.id = t.ref_topic_id
+        JOIN contribution k ON k.id = t.contribution_id
+        WHERE r.name = :name
+        ORDER BY k.city, k.id, t.id
+    """)
+    return pd.read_sql(q, engine, params={"name": name})
+
 def _rows(commune: str) -> pd.DataFrame:
     """Les contributions d'une commune."""
     # une seule extraction affichée par contribution : la plus récente
