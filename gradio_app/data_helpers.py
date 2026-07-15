@@ -34,8 +34,9 @@ def _rows(commune: str) -> pd.DataFrame:
         SELECT k.id, k.city, k.pdf_file, k.start_page, k.end_page, k.is_handwritten,
                e.ocr, e.text, e.num_words, e.num_lines,
                a.is_anonymized, a.is_of_interest,
-               (SELECT string_agg(name, ', ') FROM topic
-                 WHERE contribution_id = k.id) AS topics,
+               (SELECT string_agg(r.name, ', ') FROM topic t
+                 JOIN ref_topic r ON r.id = t.ref_topic_id
+                 WHERE t.contribution_id = k.id) AS topics,
                (SELECT string_agg(name, ', ') FROM feeling
                  WHERE contribution_id = k.id) AS feelings
         FROM contribution k
@@ -47,6 +48,16 @@ def _rows(commune: str) -> pd.DataFrame:
         ORDER BY k.id
     """)
     return pd.read_sql(q, engine, params={"city": commune})
+
+def _topic_instances(contribution_id: int) -> pd.DataFrame:
+    """Les instances de thèmes d'une contribution avec verbatim et résumé."""
+    q = text("""
+        SELECT r.name, t.verbatim, t.summary
+        FROM topic t JOIN ref_topic r ON r.id = t.ref_topic_id
+        WHERE t.contribution_id = :cid
+        ORDER BY t.id
+    """)
+    return pd.read_sql(q, engine, params={"cid": contribution_id})
 
 def _int(value) -> str:
     """Entier en texte, ou 'N/C' si manquant."""
@@ -80,14 +91,20 @@ def list_contributions(commune: str) -> list[str]:
 def get_contribution(commune: str, idx: int) -> dict:
     rows = _rows(commune)
     r = rows.iloc[idx]
+    # le détail (verbatim + résumé) ne s'affiche que si l'analyse existe
+    inst = _topic_instances(int(r["id"]))
+    details = "".join(
+        f"\n  - **{i.name}** — « {i.verbatim} » : *{i.summary}*"
+        for i in inst.itertuples() if pd.notna(i.verbatim)
+    )
     return {
         # bloc affiché à gauche, sous le select Contribution
         "analyse": (
             f"#### Analyse textuelle\n"
-            f"- Topics : {_text(r['topics'])}\n"
-            f"- Sentiment : {_text(r['feelings'])}\n"
-            f"- Anonymisé : {_bool(r['is_anonymized'])}\n"
-            f"- Contribution d'intérêt : {_bool(r['is_of_interest'])}"
+            f"- **Thèmes détectés** : {_text(r['topics'])}{details}\n"
+            f"- **Sentiment** : {_text(r['feelings'])}\n"
+            f"- **Anonymisé** : {_bool(r['is_anonymized'])}\n"
+            f"- **Contribution d'intérêt** : {_bool(r['is_of_interest'])}"
         ),
         # provenance technique, au-dessus du résultat OCR
         # (la nature Manuscrit/Dactylographié est déjà dans le libellé du dropdown)

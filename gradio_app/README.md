@@ -6,8 +6,9 @@ et activer deux variables par contribution : **Anonymisé** et **Contribution d'
 ## Fonctionnement
 
 Les données sont lues **directement dans la base PostgreSQL**, pas de fichier intermédiaire.
-Une contribution affiche : ses thèmes et sentiments (tables `topic` / `feeling`), le texte
-de sa dernière extraction (`extraction`, `max(id)`), et son PDF (`data/raw/pdfs/`). Les deux
+Une contribution affiche : ses thèmes (instances `topic` reliées au référentiel
+`ref_topic`, avec verbatim et résumé quand l'analyse existe), ses sentiments (`feeling`),
+le texte de sa dernière extraction (`extraction`, `max(id)`), et son PDF (`data/raw/pdfs/`). Les deux
 cases cochées sont écrites dans la table `annotation` (UPSERT ; les deux décochées = ligne
 supprimée). Voir `database/README.md` pour le modèle.
 
