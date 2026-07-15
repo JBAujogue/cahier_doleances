@@ -28,8 +28,8 @@ source .venv/bin/activate
 Ou préfixez vos commandes par `uv run` :
 
 ```bash
-uv run python -m database.seed_mock  # remplit la base avec le seed de démo
-uv run python gradio_app/app.py      # lance l'app
+uv run python -m database.seed_mock # remplit la base avec le seed de démo
+uv run python gradio_app/app.py # lance l'app
 ```
 
 ## Base de données
@@ -38,12 +38,21 @@ La connexion PostgreSQL est lue depuis `.env` (`DB_HOST`, `DB_PORT`, `DB_USER`,
 `DB_PASSWORD`, `DB_NAME`). Voir [database/README.md](database/README.md) pour le modèle,
 les migrations Alembic et le seed.
 
-## Lancer les pre-commit hooks localement
+## Qualité et sécurité du code (pre-commit)
 
-[Installer pre-commit](https://pre-commit.com/) puis :
+Les hooks [pre-commit](https://pre-commit.com/) tournent à chaque commit, et la CI
+les rejoue sur chaque PR (`.github/workflows/pre-commit.yaml`). Trois familles :
+
+- **hygiène** : espaces/fins de ligne, newline final, syntaxe YAML, résidus de merge ;
+- **lint Python** : ruff avec autofix ;
+- **sécurité** : [gitleaks](https://github.com/gitleaks/gitleaks) bloque tout secret
+  (mot de passe, clé API, token) avant qu'il parte dans un repo public, et
+  `check-added-large-files` refuse les fichiers > 500 Ko (dump, PDF égaré).
 
 ```bash
-pre-commit run --all-files
+uv run pre-commit install # une fois : active les hooks à chaque commit
+uv run pre-commit run --all-files # lancer manuellement sur tout le repo
+uv run pre-commit autoupdate # mettre à jour les versions des hooks
 ```
 
 ## Tester avec Tox
