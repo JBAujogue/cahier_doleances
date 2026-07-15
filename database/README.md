@@ -6,6 +6,7 @@
 erDiagram
     contribution ||--o{ extraction : "contribution_id"
     contribution ||--o{ topic : "contribution_id"
+    ref_topic ||--o{ topic : "ref_topic_id"
     contribution ||--o{ feeling : "contribution_id"
     contribution ||--o| annotation : "contribution_id"
 
@@ -25,10 +26,16 @@ erDiagram
         int num_words
         int num_lines
     }
+    ref_topic {
+        int id PK
+        string name "taxonomie prédéfinie (zero-shot LLM)"
+    }
     topic {
         int id PK
         int contribution_id FK
-        string name
+        int ref_topic_id FK
+        text verbatim "extrait exact qui porte le thème"
+        text summary "résumé du verbatim"
     }
     feeling {
         int id PK
@@ -46,7 +53,9 @@ erDiagram
 |---|---|---|
 | `contribution` | métadonnées : commune, fichier, pages | équipe séparation |
 | `extraction` | texte extrait une ligne par essai d'OCR | équipe extraction |
-| `topic` / `feeling` | thèmes et sentiments détectés : une ligne par résultat | équipe analyse |
+| `ref_topic` | taxonomie des thèmes, prédéfinie pour l'extraction zero-shot | équipe analyse |
+| `topic` | instances de thèmes détectés : verbatim + résumé, une ligne par détection | équipe analyse |
+| `feeling` | sentiments détectés : une ligne par résultat | équipe analyse |
 | `annotation` | variables activées dans l'app ("Anonymisé", "d'intérêt") | outil Gradio |
 
 **La logique** : une tâche métier = une table, chaque équipe n'écrit que dans la sienne
@@ -57,14 +66,20 @@ ligne `extraction` = pas encore extraite, pas de ligne `annotation` = pas encore
 ## Mettre à jour le modèle de données
 
 La source de vérité est `database/models.py` ; Alembic versionne chaque évolution dans
-`database/migrations/versions/` (committé, rejouable sur une base vierge). Toute évolution
-est additive : nouvelle colonne ou nouvelle table, jamais de refonte.
+`database/migrations/versions/` (committé, rejouable sur une base vierge).
+
+Évolution **additive** (nouvelle colonne, nouvelle table) :
 
 1. Modifier `database/models.py`
 2. `uv run alembic revision --autogenerate -m "description"`
 3. **Relire** le script généré dans `database/migrations/versions/`
 4. `uv run alembic upgrade head`
 5. Committer `models.py` + la migration
+
+Évolution **destructive** (supprimer/renommer une colonne) : jamais en un coup — dump
+d'abord, puis trois migrations *expand → backfill → contract* avec vérification chiffrée
+avant le contract (voir les migrations du passage aux instances de topics comme exemple :
+`expand ref_topic` → `backfill topic.name` → `contract suppression de topic.name`).
 
 La connexion est construite par `database/db.py` depuis `.env` — jamais de credentials
 dans un fichier committé.

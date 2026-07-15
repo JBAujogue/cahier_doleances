@@ -27,12 +27,21 @@ class Extraction(Base):
     num_words = Column(Integer)
     num_lines = Column(Integer)
 
+# Table de référence TODO: demander pour compléter ceci avec les datas
+class RefTopic(Base):
+    __tablename__ = "ref_topic"
+
+    id = Column(Integer, primary_key=True)
+    name = Column(String) # TODO: précision élément à compléter
+
 class Topic(Base):
     __tablename__ = "topic"
 
     id = Column(Integer, primary_key=True)
-    contribution_id = Column(Integer, ForeignKey("contribution.id"))
-    name = Column(String)
+    contribution_id = Column(Integer, ForeignKey("contribution.id")) 
+    ref_topic_id = Column(Integer, ForeignKey("ref_topic.id"))
+    verbatim = Column(Text)
+    summary = Column(Text)
 
 class Feeling(Base):
     __tablename__ = "feeling"

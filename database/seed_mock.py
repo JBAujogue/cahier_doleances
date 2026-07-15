@@ -1,7 +1,7 @@
 from sqlalchemy.orm import Session
 
 from database.db import get_engine
-from database.models import Annotation, Contribution, Extraction, Feeling, Topic
+from database.models import Annotation, Contribution, Extraction, Feeling, RefTopic, Topic
 
 OCR = "mock_data_ocr"
 
@@ -32,7 +32,17 @@ MOCK = [
             "- Reconsidération des avantages accordés par bon nombre de sociétés : "
             "SNCF, EDF, compagnies aériennes, etc., facilitant ainsi une baisse des tarifs."
         ),
-        "topics": ["fiscalité", "pouvoir d'achat", "démocratie"],
+        "topics": [
+            {"name": "fiscalité",
+             "verbatim": "Rétablissement de l'ISF.",
+             "summary": "Retour de l'ISF, suppression des niches fiscales, taxation du luxe."},
+            {"name": "pouvoir d'achat",
+             "verbatim": "Redonner aux retraités leur pouvoir d'achat (indexation de toutes les retraites sur l'inflation et suppression des 1,7 de CSG pour tous).",
+             "summary": "Indexer les retraites sur l'inflation, alléger la CSG."},
+            {"name": "démocratie",
+             "verbatim": "Vote obligatoire et prise en compte des votes blancs.",
+             "summary": "Vote obligatoire, vote blanc reconnu, révision par référendum."},
+        ],
         "feeling": "détermination",
     },
     {
@@ -60,7 +70,14 @@ MOCK = [
             "jour il existe 34 977 communes ; celles qui ont fusionné ont vu leur "
             "dotation plus importante que si elles étaient restées séparées."
         ),
-        "topics": ["dépenses publiques", "démocratie"],
+        "topics": [
+            {"name": "dépenses publiques",
+             "verbatim": "Diminution des rémunérations des 600 hauts fonctionnaires de l'État (18 700 €/mois).",
+             "summary": "Réduire le train de vie de l'État : députés, hauts fonctionnaires, avantages."},
+            {"name": "démocratie",
+             "verbatim": "II - Suppression du Sénat.",
+             "summary": "Réforme institutionnelle : moins de députés, suppression du Sénat."},
+        ],
         "feeling": "septiscisme",
     },
     {
@@ -98,7 +115,20 @@ MOCK = [
             "privilèges !!!\n"
             "Faudra-t-il recommencer ?"
         ),
-        "topics": ["logement", "agriculture", "démocratie", "fiscalité"],
+        "topics": [
+            {"name": "logement",
+             "verbatim": "Des salariés en C.D.I. (et encore ils ont un contrat) ne peuvent parfois pas se loger tant exorbitants sont les loyers, et en nombre insuffisant.",
+             "summary": "Loyers trop chers, manque de logements sociaux."},
+            {"name": "agriculture",
+             "verbatim": "Est-il normal que nos agriculteurs ou producteurs vendent à perte leurs produits ?",
+             "summary": "Les agriculteurs vendent à perte et ne vivent pas de leur travail."},
+            {"name": "démocratie",
+             "verbatim": "Il me semblait qu'en 1789, le peuple français avait aboli les privilèges !!!",
+             "summary": "Dénonce les privilèges et avantages cumulés des élus."},
+            {"name": "fiscalité",
+             "verbatim": "toujours plus de taxes pour combler des déficits engagés",
+             "summary": "Ras-le-bol fiscal du « petit peuple »."},
+        ],
         "feeling": "colère",
     },
     {
@@ -128,7 +158,17 @@ MOCK = [
             "donnée au peuple, pas seulement aux élus.\n"
             "Égalité en droits et en devoirs"
         ),
-        "topics": ["fiscalité", "éducation", "démocratie"],
+        "topics": [
+            {"name": "fiscalité",
+             "verbatim": "il est important que toute personne vivant sur le territoire français paye l'impôt selon ses revenus",
+             "summary": "Impôt pour tous selon les revenus ; retour de l'ISF pour les plus aisés."},
+            {"name": "éducation",
+             "verbatim": "Mettons la cantine gratuite à tous ces enfants scolarisés.",
+             "summary": "Cantine gratuite pour tous les enfants scolarisés."},
+            {"name": "démocratie",
+             "verbatim": "Mettons en place le Référendum d'Initiative Citoyen.",
+             "summary": "Instaurer le RIC : donner la parole au peuple."},
+        ],
         "feeling": "espoir",
     },
 ]
@@ -139,6 +179,16 @@ def main():
         # garde-fou : les ids étant auto-incrémentés, relancer le seed dupliquerait tout
         if session.query(Contribution).first():
             raise SystemExit("La base contient déjà des contributions : abandon.")
+
+        # référentiel : un nom unique par thème (remplaçable par la liste
+        # officielle de l'équipe analyse, sans migration)
+        names = sorted({t["name"] for entry in MOCK for t in entry["topics"]})
+        refs = {}
+        for name in names:
+            ref = RefTopic(name=name)
+            session.add(ref)
+            session.flush()           # récupère l'id auto-généré
+            refs[name] = ref.id
 
         for entry in MOCK:
             contribution = Contribution(
@@ -160,13 +210,18 @@ def main():
                 num_lines=entry["text"].count("\n") + 1,
             ))
 
-            for name in entry["topics"]:
-                session.add(Topic(contribution_id=contribution.id, name=name))
+            for t in entry["topics"]:
+                session.add(Topic(
+                    contribution_id=contribution.id,
+                    ref_topic_id=refs[t["name"]],
+                    verbatim=t["verbatim"],
+                    summary=t["summary"],
+                ))
             session.add(Feeling(contribution_id=contribution.id, name=entry["feeling"]))
 
         session.commit()
 
-        for model in (Contribution, Extraction, Topic, Feeling, Annotation):
+        for model in (Contribution, Extraction, RefTopic, Topic, Feeling, Annotation):
             print(f"{model.__tablename__}: {session.query(model).count()} lignes")
 
 
