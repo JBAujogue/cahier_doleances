@@ -21,7 +21,7 @@ def upgrade() -> None:
     # Mettre les valeurs déjà en base dans la nouvelle table
     op.execute("""
         INSERT INTO ref_topic (name)
-        SELECT DISTINCT name FROM topic WHERE name IS NOT NULL 
+        SELECT DISTINCT name FROM topic WHERE name IS NOT NULL
     """)
     op.execute("""
         UPDATE topic SET ref_topic_id = r.id

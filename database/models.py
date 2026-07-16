@@ -14,7 +14,7 @@ class Contribution(Base):
     city = Column(String) # parsée du nom du fichier ; TODO insee/table city si data INSEE
     pdf_file = Column(String) # nom du fichier du cahier ; TODO ajuster en fonction de l'adaptation S3 de Ronan
     start_page = Column(Integer)
-    end_page = Column(Integer) 
+    end_page = Column(Integer)
     is_handwritten = Column(Boolean)
 
 class Extraction(Base):
@@ -38,7 +38,7 @@ class Topic(Base):
     __tablename__ = "topic"
 
     id = Column(Integer, primary_key=True)
-    contribution_id = Column(Integer, ForeignKey("contribution.id")) 
+    contribution_id = Column(Integer, ForeignKey("contribution.id"))
     ref_topic_id = Column(Integer, ForeignKey("ref_topic.id"))
     verbatim = Column(Text)
     summary = Column(Text)
@@ -55,4 +55,4 @@ class Annotation(Base):
 
     contribution_id = Column(Integer, ForeignKey("contribution.id"), primary_key=True)
     is_anonymized = Column(Boolean)
-    is_of_interest = Column(Boolean) 
+    is_of_interest = Column(Boolean)
