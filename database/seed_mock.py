@@ -1,7 +1,7 @@
 from sqlalchemy.orm import Session
 
 from database.db import get_engine
-from database.models import Annotation, Contribution, Extraction, Feeling, RefTopic, Topic
+from database.models import Annotation, Contribution, Extraction, Feeling, Instance, Topic
 
 OCR = "mock_data_ocr"
 
@@ -181,11 +181,12 @@ def main():
             raise SystemExit("La base contient déjà des contributions : abandon.")
 
         # référentiel : un nom unique par thème (remplaçable par la liste
-        # officielle de l'équipe analyse, sans migration)
+        # officielle de l'équipe analyse, sans migration) ; parent reste NULL,
+        # la hiérarchie de la taxonomie sera fournie par l'équipe analyse
         names = sorted({t["name"] for entry in MOCK for t in entry["topics"]})
         refs = {}
         for name in names:
-            ref = RefTopic(name=name)
+            ref = Topic(name=name)
             session.add(ref)
             session.flush()           # récupère l'id auto-généré
             refs[name] = ref.id
@@ -211,9 +212,9 @@ def main():
             ))
 
             for t in entry["topics"]:
-                session.add(Topic(
+                session.add(Instance(
                     contribution_id=contribution.id,
-                    ref_topic_id=refs[t["name"]],
+                    topic_id=refs[t["name"]],
                     verbatim=t["verbatim"],
                     summary=t["summary"],
                 ))
@@ -221,7 +222,7 @@ def main():
 
         session.commit()
 
-        for model in (Contribution, Extraction, RefTopic, Topic, Feeling, Annotation):
+        for model in (Contribution, Extraction, Topic, Instance, Feeling, Annotation):
             print(f"{model.__tablename__}: {session.query(model).count()} lignes")
 
 

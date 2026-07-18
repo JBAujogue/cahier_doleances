@@ -1,8 +1,8 @@
 # App Gradio : visualisation et annotation
 
-Interface à deux onglets : **Par commune** — parcourir les contributions (texte extrait +
+Interface à deux onglets : **Par commune**  parcourir les contributions (texte extrait +
 PDF source) et activer deux variables par contribution (**Anonymisé**, **Contribution
-d'intérêt**) — et **Par thème** — consulter, en lecture seule, toutes les instances d'un
+d'intérêt**)  et **Par thème**  consulter, en lecture seule, toutes les instances d'un
 thème : KPI (instances / contributions / communes), grille de cartes (document source,
 verbatim, résumé, sentiment) et répartition des thèmes sur tout le corpus.
 
@@ -30,7 +30,7 @@ Aucune écriture depuis cette vue. Voir `database/README.md` pour le modèle.
 
 ## Prérequis
 
-1. Base accessible et remplie — via `uv run python -m database.seed_mock` (démo) ou le pipeline data.
+1. Base accessible et remplie  via `uv run python -m database.seed_mock` (démo) ou le pipeline data.
 2. `.env` renseigné : `DB_HOST`, `DB_PORT`, `DB_USER`, `DB_PASSWORD`, `DB_NAME` (mêmes variables que `database/db.py`).
 3. Les PDF présents dans `data/raw/pdfs/` pour l'aperçu (sinon « PDF introuvable » s'affiche, le reste marche).
 

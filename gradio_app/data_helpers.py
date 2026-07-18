@@ -32,8 +32,8 @@ def ref_topic_counts() -> pd.DataFrame:
     # LEFT JOIN : un thème sans instance reste visible (taxonomie ≠ avancement)
     q = text("""
         SELECT r.name, count(t.id) AS n
-        FROM ref_topic r
-        LEFT JOIN topic t ON t.ref_topic_id = r.id
+        FROM topic r
+        LEFT JOIN instance t ON t.topic_id = r.id
         GROUP BY r.name
         ORDER BY r.name
     """)
@@ -54,8 +54,8 @@ def topic_rows(name: str) -> pd.DataFrame:
                (SELECT string_agg(name, ', ') FROM feeling
                  WHERE contribution_id = k.id) AS feelings,
                t.verbatim, t.summary, t.contribution_id
-        FROM topic t
-        JOIN ref_topic r ON r.id = t.ref_topic_id
+        FROM instance t
+        JOIN topic r ON r.id = t.topic_id
         JOIN contribution k ON k.id = t.contribution_id
         WHERE r.name = :name
         ORDER BY k.city, k.id, t.id
@@ -69,8 +69,8 @@ def _rows(commune: str) -> pd.DataFrame:
         SELECT k.id, k.city, k.pdf_file, k.start_page, k.end_page, k.is_handwritten,
                e.ocr, e.text, e.num_words, e.num_lines,
                a.is_anonymized, a.is_of_interest,
-               (SELECT string_agg(r.name, ', ') FROM topic t
-                 JOIN ref_topic r ON r.id = t.ref_topic_id
+               (SELECT string_agg(r.name, ', ') FROM instance t
+                 JOIN topic r ON r.id = t.topic_id
                  WHERE t.contribution_id = k.id) AS topics,
                (SELECT string_agg(name, ', ') FROM feeling
                  WHERE contribution_id = k.id) AS feelings
@@ -88,7 +88,7 @@ def _topic_instances(contribution_id: int) -> pd.DataFrame:
     """Les instances de thèmes d'une contribution avec verbatim et résumé."""
     q = text("""
         SELECT r.name, t.verbatim, t.summary
-        FROM topic t JOIN ref_topic r ON r.id = t.ref_topic_id
+        FROM instance t JOIN topic r ON r.id = t.topic_id
         WHERE t.contribution_id = :cid
         ORDER BY t.id
     """)
