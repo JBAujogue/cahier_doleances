@@ -19,7 +19,7 @@ docs = json.loads((DATA / "analysis/label/instances.json").read_text())["documen
 df = pd.read_csv(DATA / "dataset.csv")
 
 noms = Counter(t["name"] for t in topics)
-# R1 — résolution canonique : parmi les homonymes on retient l'UUID le plus petit
+# R1  résolution canonique : parmi les homonymes on retient l'UUID le plus petit
 # (déterministe). On ne les SUPPRIME pas : les supprimer orphelinait 620 topics.
 by_name = {}
 for t in sorted(topics, key=lambda t: t["id"]):
@@ -94,7 +94,7 @@ for c in sorted(comps, key=lambda c: -sum(own.get(n, 0) for n in c)):
     if n_inst == 0:
         continue
     racine = next((n for n in c if n not in parent_de), c[0])
-    arbres.append((f"{racine[:45]} — {len(c)} topics · {n_inst} détections", racine))
+    arbres.append((f"{racine[:45]}  {len(c)} topics · {n_inst} détections", racine))
 
 LABELS = [a[0] for a in arbres]
 RACINE = dict(arbres)
@@ -118,7 +118,7 @@ def _type(n):
     return "enfant" if h == 0 else "parent" if h == 1 else "grand-parent" if h == 2 else "racine"
 
 
-# couleur STABLE par typologie — 4 teintes DISTINCTES (le rouge est réservé au focus)
+# couleur STABLE par typologie  4 teintes DISTINCTES (le rouge est réservé au focus)
 COULEUR = {"racine": "#7c3aed", # violet
            "grand-parent": "#2563eb", # bleu
            "parent": "#f59e0b", # ambre
@@ -272,7 +272,7 @@ def _layout_foret(keep):
 
 
 def _figure_apercu(racines):
-    """Vue d'ensemble : le SQUELETTE CONNECTÉ des arbres retenus — racines,
+    """Vue d'ensemble : le SQUELETTE CONNECTÉ des arbres retenus  racines,
     grands-parents et parents, avec leurs arêtes. Les feuilles apparaissent au
     zoom. Layout radial de forêt, taille = détections agrégées."""
     keep = _squelette(racines)
@@ -313,7 +313,7 @@ def _figure_apercu(racines):
         legend=dict(orientation="v", xanchor="right", x=1, yanchor="bottom", y=0,
                     bgcolor="rgba(255,255,255,0.75)", bordercolor="#e5e7eb", borderwidth=1),
         xaxis=dict(visible=False),
-        # 1:1 — sans ça le radial est écrasé en ellipse
+        # 1:1  sans ça le radial est écrasé en ellipse
         yaxis=dict(visible=False, scaleanchor="x", scaleratio=1),
         paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
         margin=dict(l=10, r=10, t=10, b=10), height=620,
@@ -327,7 +327,7 @@ def _description(nom):
     sous = f"{len(enfants[nom])} sous-thèmes" if enfants[nom] else "aucun sous-thème (feuille)"
     return (
         f"### {nom}\n"
-        f"**Type** : {_type(nom)} · **Parent** : {t['parent'] or '— (racine)'} · {sous}\n\n"
+        f"**Type** : {_type(nom)} · **Parent** : {t['parent'] or '(racine)'} · {sous}\n\n"
         f"**Détections** : {_rec(nom)} au total · {own.get(nom, 0)} sur ce topic\n\n"
         f"{t['description']}"
     )
@@ -339,7 +339,7 @@ def _occurrences(nom):
     for doc_id, rationale, extract in occ.get(nom, [])[:8]:
         literal = extract[:40] in content.get(doc_id, "")
         cite = f"« {extract.strip()} »" if literal else f"*(reformulé)* {extract.strip()}"
-        lignes.append(f"> {cite}\n>\n> — doc {doc_id} · {rationale}")
+        lignes.append(f"> {cite}\n>\n>  doc {doc_id} · {rationale}")
     corps = "\n\n".join(lignes) if lignes else (
         "*Ce thème regroupe des sous-thèmes ; les occurrences sont sur les topics feuilles.*"
         if enfants[nom] else "*Aucune occurrence sur ce topic.*"
@@ -352,7 +352,7 @@ ROOTS = [root for _, root in arbres]        # racines d'arbres, triées par dét
 APERCU = "Vue d'ensemble"                   # sentinel : squelette des arbres retenus
 
 # filtre Profondeur : le défaut n'expose que les arbres COMPLETS (les 4 niveaux
-# présents) — la cascade tient alors sa promesse, aucun dropdown vide
+# présents)  la cascade tient alors sa promesse, aucun dropdown vide
 PROF_CHOIX = ["Arbres complets (4 niveaux)", "Arbres ≥ 3 niveaux", "Tous les arbres"]
 PROF_MIN = {PROF_CHOIX[0]: 3, PROF_CHOIX[1]: 2, PROF_CHOIX[2]: 0}
 
@@ -369,7 +369,7 @@ def _apercu_md(filtre):
     rs = roots_for(filtre)
     dets = sum(_rec(r) for r in rs)
     return (
-        f"### Vue d'ensemble — {filtre.lower()}\n"
+        f"### Vue d'ensemble {filtre.lower()}\n"
         f"**{len(rs)} arbres · {dets} détections** ({round(100 * dets / TOTAL_INST)} % du total) · "
         f"{len(docs)} documents analysés sur {len(df)}\n\n"
         f"Le graphe montre le **squelette** (racines, grands-parents, parents reliés) ; "
@@ -438,7 +438,7 @@ def on_enfant(node, focus):
     return _figure(node), _description(node), _occurrences(node), node
 
 
-with gr.Blocks(title="Doléances — thèmes") as demo:
+with gr.Blocks(title="Doléances  thèmes") as demo:
     gr.Markdown("# Cahiers de doléances vue topic (POC)")
     focus_state = gr.State()
 
