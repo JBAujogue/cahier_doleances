@@ -43,6 +43,17 @@ def list_ref_topics() -> list[str]:
     """Libellés du dropdown thème : 'fiscalité (4)'."""
     return [f"{r.name} ({r.n})" for r in ref_topic_counts().itertuples()]
 
+def topic_graph() -> pd.DataFrame:
+    """Les topics avec leur parent et leur nombre d'instances (vue graphe)."""
+    q = text("""
+        SELECT r.name, r.parent, count(i.id) AS n
+        FROM topic r
+        LEFT JOIN instance i ON i.topic_id = r.id
+        GROUP BY r.name, r.parent
+        ORDER BY r.name
+    """)
+    return pd.read_sql(q, engine)
+
 def topic_rows(name: str) -> pd.DataFrame:
     """Les instances d'un thème, jointes à leur contribution (vue 'Par thème')."""
     q = text("""
