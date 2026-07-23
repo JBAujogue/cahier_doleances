@@ -33,7 +33,12 @@ docs = json.loads((DATA / "analysis/label/instances.json").read_text())["documen
 df = pd.read_csv(DATA / "dataset.csv")
 
 noms = Counter(t["name"] for t in topics)
-by_name = {t["name"]: t for t in topics}
+# R1 — résolution canonique : parmi les homonymes on retient l'UUID le plus petit
+# (déterministe). On ne les SUPPRIME pas : les supprimer orphelinait 620 topics.
+by_name = {}
+for t in sorted(topics, key=lambda t: t["id"]):
+    by_name.setdefault(t["name"], t)
+DOUBLONS = sum(1 for c in noms.values() if c > 1)
 content = {str(r.id): r.content for r in df.itertuples()}
 
 occ = defaultdict(list)
@@ -43,23 +48,22 @@ for d in docs:
 own = {n: len(v) for n, v in occ.items()}
 TOTAL_INST = sum(own.values())
 
-#  filtre qualité (vue) ─
-dup = {n for n, c in noms.items() if c > 1}
-est_parent = {t["parent"] for t in topics if t["parent"]}
-isoles = {t["name"] for t in topics if not t["parent"] and t["name"] not in est_parent}
+#  filtre qualité (vue) : on écarte seulement les isolés et les cycles
+est_parent = {t["parent"] for t in topics if t["parent"] in by_name}
+isoles = {n for n, t in by_name.items() if not t["parent"] and n not in est_parent}
 
 
-def _cyclique(t, vus=None):
+def _cyclique(nom, vus=None):
     vus = vus or set()
-    if t["name"] in vus:
+    if nom in vus:
         return True
-    vus.add(t["name"])
-    p = t["parent"]
-    return _cyclique(by_name[p], vus) if p and p in by_name and noms[p] == 1 else False
+    vus.add(nom)
+    p = by_name[nom]["parent"]
+    return _cyclique(p, vus) if p and p in by_name else False
 
 
-cycliques = {t["name"] for t in topics if _cyclique(t)}
-propre = {t["name"] for t in topics if t["name"] not in dup | isoles | cycliques}
+cycliques = {n for n in by_name if _cyclique(n)}
+propre = set(by_name) - isoles - cycliques
 
 parent_de = {n: by_name[n]["parent"] for n in propre if by_name[n]["parent"] in propre}
 enfants = defaultdict(list)
@@ -129,10 +133,10 @@ def _type(n):
 
 
 # couleur STABLE par typologie — 4 teintes DISTINCTES (le rouge est réservé au focus)
-COULEUR = {"racine": "#7c3aed",        # violet
-           "grand-parent": "#2563eb",  # bleu
-           "parent": "#f59e0b",        # ambre
-           "enfant": "#10b981"}        # vert
+COULEUR = {"racine": "#7c3aed", # violet
+           "grand-parent": "#2563eb", # bleu
+           "parent": "#f59e0b", # ambre
+           "enfant": "#10b981"} # vert
 ORDRE_TYPE = ["racine", "grand-parent", "parent", "enfant"]
 
 
@@ -180,7 +184,7 @@ def _figure(focus):
     ordre = list(dist)
     seuil = sorted((_rec(n) for n in ordre), reverse=True)[:18][-1] if len(ordre) > 18 else 0
 
-    def _label(n):                       # label seulement si lisible (focus, voisins, gros nœuds)
+    def _label(n): # label seulement si lisible (focus, voisins, gros nœuds)
         if not (dist[n] <= 1 or _rec(n) >= seuil or n == focus):
             return ""
         return n[:24] + "…" if len(n) > 24 else n
@@ -220,40 +224,113 @@ def _figure(focus):
     return fig
 
 
-def _figure_apercu(racines):
-    """Vue d'ensemble : chaque arbre = un point (sa racine), sans arêtes.
-    Taille = détections, couleur = type. Spirale phyllotaxique : les plus gros
-    thèmes au centre, étalement régulier, déterministe."""
-    ordre = sorted(racines, key=_rec, reverse=True)          # gros au centre
-    angle = math.pi * (3 - math.sqrt(5))                     # angle d'or
-    pos = {r: (math.sqrt(i) * math.cos(i * angle), math.sqrt(i) * math.sin(i * angle))
-           for i, r in enumerate(ordre)}
-    seuil = sorted((_rec(r) for r in racines), reverse=True)[:25][-1] if len(racines) > 25 else 0
+def _squelette(racines):
+    """Nœuds non-feuilles des arbres retenus (racine d'un arbre plat incluse)."""
+    keep = set()
+    pile = list(racines)
+    while pile:
+        n = pile.pop()
+        if _hauteur(n) >= 1 or n in racines:
+            keep.add(n)
+            pile.extend(c for c in enfants[n] if _hauteur(c) >= 1)
+    return keep
 
-    traces = []
+
+def _layout_foret(keep):
+    """Layout RADIAL de forêt : chaque arbre reçoit un secteur angulaire
+    proportionnel à sa taille, la profondeur devient le rayon. Contrairement à
+    un force-directed, deux arbres ne se chevauchent jamais et les nœuds d'un
+    même niveau sont régulièrement espacés sur leur anneau."""
+    enf = {n: sorted((c for c in enfants[n] if c in keep), key=_rec, reverse=True)
+           for n in keep}
+    racines = sorted((n for n in keep if parent_de.get(n) not in keep),
+                     key=_rec, reverse=True)
+
+    largeur = {}                       # nb de feuilles du squelette sous chaque nœud
+    def compte(n):
+        if n not in largeur:
+            largeur[n] = 1 if not enf[n] else sum(compte(c) for c in enf[n])
+        return largeur[n]
+
+    total = sum(compte(r) for r in racines) or 1
+
+    prof = {}
+    def marque(n, d):
+        prof[n] = d
+        for c in enf[n]:
+            marque(c, d + 1)
+    for r in racines:
+        marque(r, 1)
+
+    # rayon de base : assez grand pour que l'anneau le plus chargé respire
+    par_niveau = Counter(prof.values())
+    R0 = max(1.0, max((c * 0.55) / (2 * math.pi * d) for d, c in par_niveau.items()))
+
+    pos = {}
+    def place(n, a0, a1):
+        a = (a0 + a1) / 2
+        r = R0 * prof[n]
+        pos[n] = (r * math.cos(a), r * math.sin(a))
+        curseur = a0
+        for c in enf[n]:
+            w = (a1 - a0) * largeur[c] / largeur[n]
+            place(c, curseur, curseur + w)
+            curseur += w
+
+    curseur = 0.0
+    for r0 in racines:
+        w = 2 * math.pi * largeur[r0] / total
+        place(r0, curseur, curseur + w)
+        curseur += w
+    return pos
+
+
+def _figure_apercu(racines):
+    """Vue d'ensemble : le SQUELETTE CONNECTÉ des arbres retenus — racines,
+    grands-parents et parents, avec leurs arêtes. Les feuilles apparaissent au
+    zoom. Layout radial de forêt, taille = détections agrégées."""
+    keep = _squelette(racines)
+    pos = _layout_foret(keep)
+
+    ex, ey = [], []
+    for n in keep:
+        p = parent_de.get(n)
+        if p in keep:
+            ex += [pos[n][0], pos[p][0], None]
+            ey += [pos[n][1], pos[p][1], None]
+    traces = [go.Scatter(x=ex, y=ey, mode="lines",
+                         line=dict(width=1, color="#d1d5db"),
+                         hoverinfo="none", showlegend=False)]
+
+    ordre = list(keep)
+    seuil = sorted((_rec(n) for n in ordre), reverse=True)[:22][-1] if len(ordre) > 22 else 0
     for typ in ORDRE_TYPE:
-        ns = [r for r in racines if _type(r) == typ]
+        ns = [n for n in ordre if _type(n) == typ]
         if not ns:
             continue
         traces.append(go.Scatter(
             x=[pos[n][0] for n in ns], y=[pos[n][1] for n in ns],
             mode="markers+text",
-            text=[(n[:22] + "…" if len(n) > 22 else n) if _rec(n) >= seuil else "" for n in ns],
-            textposition="top center", textfont=dict(size=9, color="#334155"),
+            text=[(n[:24] + "…" if len(n) > 24 else n) if _rec(n) >= seuil else "" for n in ns],
+            # label placé vers l'extérieur du cercle : évite de croiser le graphe
+            textposition=["middle left" if pos[n][0] < 0 else "middle right" for n in ns],
+            textfont=dict(size=9, color="#334155"),
             name=typ,
             hovertext=[f"{n}<br>{_type(n)} · {_rec(n)} détections" for n in ns],
             hoverinfo="text",
-            marker=dict(size=[6 + min(_rec(n), 42) for n in ns], color=COULEUR[typ],
-                        line=dict(width=1, color="#ffffff")),
+            marker=dict(size=[8 + min(round(_rec(n) ** 0.5) * 2, 30) for n in ns],
+                        color=COULEUR[typ], line=dict(width=1, color="#ffffff")),
         ))
     fig = go.Figure(traces)
     fig.update_layout(
         showlegend=True,
         legend=dict(orientation="v", xanchor="right", x=1, yanchor="bottom", y=0,
                     bgcolor="rgba(255,255,255,0.75)", bordercolor="#e5e7eb", borderwidth=1),
-        xaxis=dict(visible=False), yaxis=dict(visible=False),
+        xaxis=dict(visible=False),
+        # 1:1 — sans ça le radial est écrasé en ellipse
+        yaxis=dict(visible=False, scaleanchor="x", scaleratio=1),
         paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
-        margin=dict(l=10, r=10, t=10, b=10), height=560,
+        margin=dict(l=10, r=10, t=10, b=10), height=620,
     )
     return fig
 
@@ -285,42 +362,74 @@ def _occurrences(nom):
 
 
 #  interface
+ROOTS = [root for _, root in arbres]        # racines d'arbres, triées par détections
+APERCU = "Vue d'ensemble"                   # sentinel : squelette des arbres retenus
+
+# filtre Profondeur : le défaut n'expose que les arbres COMPLETS (les 4 niveaux
+# présents) — la cascade tient alors sa promesse, aucun dropdown vide
+PROF_CHOIX = ["Arbres complets (4 niveaux)", "Arbres ≥ 3 niveaux", "Tous les arbres"]
+PROF_MIN = {PROF_CHOIX[0]: 3, PROF_CHOIX[1]: 2, PROF_CHOIX[2]: 0}
+
+
+def roots_for(filtre):
+    return [r for r in ROOTS if _hauteur(r) >= PROF_MIN.get(filtre, 3)]
+
+
+N_COMPLETS = len(roots_for(PROF_CHOIX[0]))
+DET_COMPLETS = sum(_rec(r) for r in roots_for(PROF_CHOIX[0]))
+
 BANNIERE = (
     f"### Cahiers de doléances — exploration des thèmes (POC)\n"
-    f"**{len(docs)} documents analysés sur {len(df)}** · vue filtrée qualité : "
-    f"**{len(propre)} topics propres** ({round(100 * sum(own.get(n, 0) for n in propre) / TOTAL_INST)} % "
-    f"des détections) · {len(topics) - len(propre)} topics hors périmètre · "
-    f"{len(LABELS)} arbres thématiques\n\n"
-    f"*Sélection à 4 niveaux : **racine** (arbre) → **grand-parent** → **parent** → **enfant**. "
-    f"La couleur d'un nœud dit toujours son type (voir la légende du graphe).*"
+    f"**{len(docs)} documents analysés sur {len(df)}** · "
+    f"**{N_COMPLETS} arbres complets** affichés par défaut "
+    f"({round(100 * DET_COMPLETS / TOTAL_INST)} % des détections) · "
+    f"{len(ROOTS) - N_COMPLETS} arbres en cours de structuration, accessibles via le "
+    f"filtre Profondeur\n\n"
+    f"*Topics **propres** = reliés et sans cycle ({len(propre)}) · arbres **complets** = "
+    f"les 4 niveaux racine → grand-parent → parent → enfant. "
+    f"La couleur d'un nœud dit toujours son type (légende du graphe).*"
 )
-
-ROOTS = [root for _, root in arbres] # racines d'arbres, triées par détections
-APERCU = "Vue d'ensemble" # sentinel : carte de tous les arbres
 
 
 def _kids(n):
     return sorted(enfants[n], key=_rec, reverse=True)
 
 
-def _apercu_md():
+def _apercu_md(filtre):
+    rs = roots_for(filtre)
+    dets = sum(_rec(r) for r in rs)
     return (
-        f"### Vue d'ensemble\n"
-        f"**{len(ROOTS)} arbres thématiques**, {len(propre)} topics propres.\n\n"
-        f"Chaque point = un arbre (sa racine). **Taille** = nombre de détections, "
-        f"**couleur** = type. Sélectionne une racine dans le menu pour explorer son arbre."
+        f"### Vue d'ensemble — {filtre.lower()}\n"
+        f"**{len(rs)} arbres** · {dets} détections "
+        f"(**{round(100 * dets / TOTAL_INST)} %** du total).\n\n"
+        f"Le graphe montre le **squelette** : racines, grands-parents et parents, reliés. "
+        f"Les topics feuilles apparaissent au zoom. **Taille** = détections agrégées, "
+        f"**couleur** = type.\n\n"
+        f"Sélectionne une racine pour explorer son arbre."
     )
 
 
-def on_racine(root):
-    if not root or root == APERCU: # retour à la carte d'ensemble
-        return (
-            _figure_apercu(ROOTS),
-            gr.update(choices=[], value=None, label="Grand-parent"),
-            gr.update(choices=[], value=None, label="Parent"),
-            gr.update(choices=[], value=None, label="Enfant · topic"),
-            _apercu_md(), "", None,
-        )
+def _vue_ensemble(filtre):
+    return (
+        _figure_apercu(roots_for(filtre)),
+        gr.update(choices=[], value=None, label="Grand-parent"),
+        gr.update(choices=[], value=None, label="Parent"),
+        gr.update(choices=[], value=None, label="Enfant · topic"),
+        _apercu_md(filtre), "", None,
+    )
+
+
+def on_prof(filtre):
+    """Changement de profondeur : liste Racine refiltrée + retour à l'ensemble."""
+    return (
+        gr.update(choices=[APERCU] + roots_for(filtre), value=APERCU),
+        *_vue_ensemble(filtre),
+    )
+
+
+def on_racine(root, filtre):
+    if not root or root == APERCU:
+        return _vue_ensemble(filtre)
     return (
         _figure(root),
         gr.update(choices=_kids(root), value=None, label="Grand-parent"),
@@ -361,10 +470,12 @@ with gr.Blocks(title="Doléances — thèmes") as demo:
     gr.Markdown(BANNIERE)
     focus_state = gr.State()
 
-    # sélection à 4 niveaux, en haut (sans stats : elles sont dans le panneau)
+    # filtre Profondeur + sélection à 4 niveaux, en haut
     with gr.Row():
-        racine_dd = gr.Dropdown([APERCU] + ROOTS, value=APERCU, label="Racine · arbre",
-                                filterable=True, scale=1)
+        prof_dd = gr.Dropdown(PROF_CHOIX, value=PROF_CHOIX[0], label="Profondeur",
+                              filterable=False, scale=1)
+        racine_dd = gr.Dropdown([APERCU] + roots_for(PROF_CHOIX[0]), value=APERCU,
+                                label="Racine · arbre", filterable=True, scale=1)
         gp_dd = gr.Dropdown(label="Grand-parent", filterable=True, scale=1)
         parent_dd = gr.Dropdown(label="Parent", filterable=True, scale=1)
         enfant_dd = gr.Dropdown(label="Enfant · topic", filterable=True, scale=1)
@@ -377,7 +488,10 @@ with gr.Blocks(title="Doléances — thèmes") as demo:
             description = gr.Markdown()
             occurrences = gr.Markdown()
 
-    racine_dd.change(on_racine, racine_dd,
+    prof_dd.change(on_prof, prof_dd,
+                   [racine_dd, plot, gp_dd, parent_dd, enfant_dd,
+                    description, occurrences, focus_state])
+    racine_dd.change(on_racine, [racine_dd, prof_dd],
                      [plot, gp_dd, parent_dd, enfant_dd, description, occurrences, focus_state])
     gp_dd.change(on_gp, [gp_dd, focus_state],
                  [plot, parent_dd, enfant_dd, description, occurrences, focus_state])
@@ -385,8 +499,9 @@ with gr.Blocks(title="Doléances — thèmes") as demo:
                      [plot, enfant_dd, description, occurrences, focus_state])
     enfant_dd.change(on_enfant, [enfant_dd, focus_state],
                      [plot, description, occurrences, focus_state])
-    demo.load(on_racine, racine_dd,
-              [plot, gp_dd, parent_dd, enfant_dd, description, occurrences, focus_state])
+    demo.load(on_prof, prof_dd,
+              [racine_dd, plot, gp_dd, parent_dd, enfant_dd,
+               description, occurrences, focus_state])
 
 
 if __name__ == "__main__":
