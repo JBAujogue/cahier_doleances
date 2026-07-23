@@ -22,8 +22,8 @@ import networkx as nx
 import pandas as pd
 import plotly.graph_objects as go
 
-RADIUS = 2      # profondeur du voisinage affiché autour du focus
-CAP = 45        # plafond de nœuds : au-delà, FR devient illisible
+RADIUS = 2 # profondeur du voisinage affiché autour du focus
+CAP = 45 # plafond de nœuds : au-delà, FR devient illisible
 
 DATA = Path(__file__).parent / "data"
 
@@ -136,7 +136,7 @@ COULEUR = {"racine": "#7c3aed",        # violet
 ORDRE_TYPE = ["racine", "grand-parent", "parent", "enfant"]
 
 
-# ──── voisinage (focus + rayon 2) ───
+# voisinage (focus + rayon 2)
 def _voisinage(focus):
     """BFS non orienté autour du focus, plafonné à CAP nœuds (les plus lourds
     d'abord à distance égale). Renvoie {nœud: distance au focus}."""
@@ -295,8 +295,8 @@ BANNIERE = (
     f"La couleur d'un nœud dit toujours son type (voir la légende du graphe).*"
 )
 
-ROOTS = [root for _, root in arbres]            # racines d'arbres, triées par détections
-APERCU = "— Vue d'ensemble —"                    # sentinel : carte de tous les arbres
+ROOTS = [root for _, root in arbres] # racines d'arbres, triées par détections
+APERCU = "Vue d'ensemble" # sentinel : carte de tous les arbres
 
 
 def _kids(n):
@@ -313,7 +313,7 @@ def _apercu_md():
 
 
 def on_racine(root):
-    if not root or root == APERCU:               # retour à la carte d'ensemble
+    if not root or root == APERCU: # retour à la carte d'ensemble
         return (
             _figure_apercu(ROOTS),
             gr.update(choices=[], value=None, label="Grand-parent"),
@@ -331,7 +331,7 @@ def on_racine(root):
 
 
 def on_gp(node, focus):
-    if not node:                                       # reset programmatique : on ne touche à rien
+    if not node: # reset programmatique : on ne touche à rien
         return gr.update(), gr.update(), gr.update(), gr.update(), gr.update(), focus
     return (
         _figure(node),
@@ -361,7 +361,7 @@ with gr.Blocks(title="Doléances — thèmes") as demo:
     gr.Markdown(BANNIERE)
     focus_state = gr.State()
 
-    # ── sélection à 4 niveaux, en haut (sans stats : elles sont dans le panneau) ──
+    # sélection à 4 niveaux, en haut (sans stats : elles sont dans le panneau)
     with gr.Row():
         racine_dd = gr.Dropdown([APERCU] + ROOTS, value=APERCU, label="Racine · arbre",
                                 filterable=True, scale=1)
@@ -369,7 +369,7 @@ with gr.Blocks(title="Doléances — thèmes") as demo:
         parent_dd = gr.Dropdown(label="Parent", filterable=True, scale=1)
         enfant_dd = gr.Dropdown(label="Enfant · topic", filterable=True, scale=1)
 
-    # ── graphe à gauche, détails (description + occurrences) à droite ──
+    # graphe à gauche, détails (description + occurrences) à droite
     with gr.Row():
         with gr.Column(scale=2):
             plot = gr.Plot()
