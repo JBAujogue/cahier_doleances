@@ -109,10 +109,6 @@ LABELS = [a[0] for a in arbres]
 RACINE = dict(arbres)
 
 
-def _est_pliable(n):
-    return len(enfants[n]) > 0
-
-
 _hauteur_memo = {}
 
 
@@ -126,9 +122,17 @@ def _hauteur(n):
 
 
 def _type(n):
-    """Rôle structurel, vocabulaire de la réunion (au lieu du level numérique)."""
+    """Typologie (option B) selon la hauteur au-dessus des feuilles."""
     h = _hauteur(n)
-    return "enfant" if h == 0 else "parent" if h == 1 else "grand-parent"
+    return "enfant" if h == 0 else "parent" if h == 1 else "grand-parent" if h == 2 else "racine"
+
+
+# couleur STABLE par typologie — 4 teintes DISTINCTES (le rouge est réservé au focus)
+COULEUR = {"racine": "#7c3aed",        # violet
+           "grand-parent": "#2563eb",  # bleu
+           "parent": "#f59e0b",        # ambre
+           "enfant": "#10b981"}        # vert
+ORDRE_TYPE = ["racine", "grand-parent", "parent", "enfant"]
 
 
 # ──── voisinage (focus + rayon 2) ───
@@ -170,34 +174,45 @@ def _figure(focus):
         ex += [pos[a][0], pos[b][0], None]
         ey += [pos[a][1], pos[b][1], None]
     edges = go.Scatter(x=ex, y=ey, mode="lines",
-                       line=dict(width=1, color="#d1d5db"), hoverinfo="none")
+                       line=dict(width=1, color="#d1d5db"), hoverinfo="none", showlegend=False)
 
-    # couleur par distance au focus ; label seulement si lisible (focus, voisins directs, gros nœuds)
-    teinte = {0: "#ef4444", 1: "#6366f1", 2: "#a5b4fc"}
     ordre = list(dist)
     seuil = sorted((_rec(n) for n in ordre), reverse=True)[:18][-1] if len(ordre) > 18 else 0
-    labels = []
-    for n in ordre:
-        montrer = dist[n] <= 1 or _rec(n) >= seuil
-        if not montrer:
-            labels.append("")
+
+    def _label(n):                       # label seulement si lisible (focus, voisins, gros nœuds)
+        if not (dist[n] <= 1 or _rec(n) >= seuil or n == focus):
+            return ""
+        return n[:24] + "…" if len(n) > 24 else n
+
+    traces = [edges]
+    # une trace par typologie présente : couleur STABLE + légende automatique
+    for typ in ORDRE_TYPE:
+        ns = [n for n in ordre if _type(n) == typ]
+        if not ns:
             continue
-        prefixe = "▸ " if _est_pliable(n) and n != focus else ""
-        labels.append(prefixe + (n[:24] + "…" if len(n) > 24 else n))
-    nodes = go.Scatter(
-        x=[pos[n][0] for n in ordre], y=[pos[n][1] for n in ordre],
-        mode="markers+text", text=labels, textposition="top center",
-        textfont=dict(size=10, color="#334155"),
-        hovertext=[f"{n}<br>{_rec(n)} détections"
-                   + (f" · {len(enfants[n])} sous-thèmes" if enfants[n] else "") for n in ordre],
-        hoverinfo="text",
-        marker=dict(size=[24 if n == focus else 12 + min(_rec(n), 24) for n in ordre],
-                    color=[teinte[dist[n]] for n in ordre],
-                    line=dict(width=2, color="#ffffff")),
-    )
-    fig = go.Figure([edges, nodes])
+        traces.append(go.Scatter(
+            x=[pos[n][0] for n in ns], y=[pos[n][1] for n in ns],
+            mode="markers+text", text=[_label(n) for n in ns],
+            textposition="top center", textfont=dict(size=10, color="#334155"),
+            name=typ,
+            hovertext=[f"{n}<br>{_type(n)} · {_rec(n)} détections" for n in ns],
+            hoverinfo="text",
+            marker=dict(size=[12 + min(_rec(n), 24) for n in ns],
+                        color=COULEUR[typ], line=dict(width=1.5, color="#ffffff")),
+        ))
+    # anneau rouge = « vous êtes ici » (la couleur du nœud continue de dire son type)
+    traces.append(go.Scatter(
+        x=[pos[focus][0]], y=[pos[focus][1]], mode="markers", name="sélection",
+        marker=dict(size=20 + min(_rec(focus), 24), color="rgba(0,0,0,0)",
+                    line=dict(width=3, color="#ef4444")),
+        hoverinfo="skip",
+    ))
+    fig = go.Figure(traces)
     fig.update_layout(
-        showlegend=False, xaxis=dict(visible=False), yaxis=dict(visible=False),
+        showlegend=True,
+        legend=dict(orientation="v", xanchor="right", x=1, yanchor="bottom", y=0,
+                    bgcolor="rgba(255,255,255,0.75)", bordercolor="#e5e7eb", borderwidth=1),
+        xaxis=dict(visible=False), yaxis=dict(visible=False),
         paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
         margin=dict(l=10, r=10, t=10, b=10), height=560,
     )
@@ -230,16 +245,6 @@ def _occurrences(nom):
     return f"#### Occurrences dans les textes\n{corps}"
 
 
-def _feuilles(n):
-    """Topics feuilles (enfants) sous un nœud."""
-    if not enfants[n]:
-        return [n]
-    out = []
-    for c in enfants[n]:
-        out.extend(_feuilles(c))
-    return out
-
-
 #  interface
 BANNIERE = (
     f"### Cahiers de doléances — exploration des thèmes (POC)\n"
@@ -247,38 +252,51 @@ BANNIERE = (
     f"**{len(propre)} topics propres** ({round(100 * sum(own.get(n, 0) for n in propre) / TOTAL_INST)} % "
     f"des détections) · {len(topics) - len(propre)} topics hors périmètre · "
     f"{len(LABELS)} arbres thématiques\n\n"
-    f"*Sélection en fil d'Ariane : **grand-parent** (arbre) → **parent** (sous-thème) → **topic**.*"
+    f"*Sélection à 4 niveaux : **racine** (arbre) → **grand-parent** → **parent** → **enfant**. "
+    f"La couleur d'un nœud dit toujours son type (voir la légende du graphe).*"
 )
 
-GP_CHOICES = [(lbl, RACINE[lbl]) for lbl in LABELS]
-DEFAULT_ROOT = RACINE[LABELS[0]]
+ROOTS = [root for _, root in arbres]            # racines d'arbres, triées par détections
+DEFAULT_ROOT = ROOTS[0]
 
 
-def on_grandparent(root):
-    kids = sorted(enfants[root], key=_rec, reverse=True)
-    pchoices = [(f"{k} · {_rec(k)} détections", k) for k in kids]
+def _kids(n):
+    return sorted(enfants[n], key=_rec, reverse=True)
+
+
+def on_racine(root):
     return (
         _figure(root),
-        gr.update(choices=pchoices, value=None, label=f"Parent · sous-thème ({len(kids)})"),
-        gr.update(choices=[], value=None, label="Topic"),
+        gr.update(choices=_kids(root), value=None, label="Grand-parent"),
+        gr.update(choices=[], value=None, label="Parent"),
+        gr.update(choices=[], value=None, label="Enfant · topic"),
         _description(root), _occurrences(root), root,
     )
 
 
-def on_parent(parent, focus):
-    if not parent:                                    # reset programmatique : no-op
-        return _figure(focus), gr.update(), _description(focus), _occurrences(focus), focus
-    leaves = sorted(_feuilles(parent), key=_rec, reverse=True)
-    tchoices = [(f"{lf} · {_rec(lf)} détections", lf) for lf in leaves]
+def on_gp(node, focus):
+    if not node:                                       # reset programmatique : no-op
+        return _figure(focus), gr.update(), gr.update(), _description(focus), _occurrences(focus), focus
     return (
-        _figure(parent),
-        gr.update(choices=tchoices, value=None, label=f"Topic ({len(leaves)})"),
-        _description(parent), _occurrences(parent), parent,
+        _figure(node),
+        gr.update(choices=_kids(node), value=None, label="Parent"),
+        gr.update(choices=[], value=None, label="Enfant · topic"),
+        _description(node), _occurrences(node), node,
     )
 
 
-def on_topic(topic, focus):
-    cible = topic or focus
+def on_parent(node, focus):
+    if not node:
+        return _figure(focus), gr.update(), _description(focus), _occurrences(focus), focus
+    return (
+        _figure(node),
+        gr.update(choices=_kids(node), value=None, label="Enfant · topic"),
+        _description(node), _occurrences(node), node,
+    )
+
+
+def on_enfant(node, focus):
+    cible = node or focus
     return _figure(cible), _description(cible), _occurrences(cible), cible
 
 
@@ -286,12 +304,13 @@ with gr.Blocks(title="Doléances — thèmes") as demo:
     gr.Markdown(BANNIERE)
     focus_state = gr.State()
 
-    # ── sélection fil d'Ariane à 3 niveaux, en haut ──
+    # ── sélection à 4 niveaux, en haut (sans stats : elles sont dans le panneau) ──
     with gr.Row():
-        gp = gr.Dropdown(GP_CHOICES, value=DEFAULT_ROOT, label="Grand-parent · arbre",
-                         filterable=True, scale=1)
-        parent_dd = gr.Dropdown(label="Parent · sous-thème", filterable=True, scale=1)
-        topic_dd = gr.Dropdown(label="Topic", filterable=True, scale=1)
+        racine_dd = gr.Dropdown(ROOTS, value=DEFAULT_ROOT, label="Racine · arbre",
+                                filterable=True, scale=1)
+        gp_dd = gr.Dropdown(label="Grand-parent", filterable=True, scale=1)
+        parent_dd = gr.Dropdown(label="Parent", filterable=True, scale=1)
+        enfant_dd = gr.Dropdown(label="Enfant · topic", filterable=True, scale=1)
 
     # ── graphe à gauche, détails (description + occurrences) à droite ──
     with gr.Row():
@@ -301,14 +320,16 @@ with gr.Blocks(title="Doléances — thèmes") as demo:
             description = gr.Markdown()
             occurrences = gr.Markdown()
 
-    gp.change(on_grandparent, gp,
-              [plot, parent_dd, topic_dd, description, occurrences, focus_state])
+    racine_dd.change(on_racine, racine_dd,
+                     [plot, gp_dd, parent_dd, enfant_dd, description, occurrences, focus_state])
+    gp_dd.change(on_gp, [gp_dd, focus_state],
+                 [plot, parent_dd, enfant_dd, description, occurrences, focus_state])
     parent_dd.change(on_parent, [parent_dd, focus_state],
-                     [plot, topic_dd, description, occurrences, focus_state])
-    topic_dd.change(on_topic, [topic_dd, focus_state],
-                    [plot, description, occurrences, focus_state])
-    demo.load(on_grandparent, gp,
-              [plot, parent_dd, topic_dd, description, occurrences, focus_state])
+                     [plot, enfant_dd, description, occurrences, focus_state])
+    enfant_dd.change(on_enfant, [enfant_dd, focus_state],
+                     [plot, description, occurrences, focus_state])
+    demo.load(on_racine, racine_dd,
+              [plot, gp_dd, parent_dd, enfant_dd, description, occurrences, focus_state])
 
 
 if __name__ == "__main__":
