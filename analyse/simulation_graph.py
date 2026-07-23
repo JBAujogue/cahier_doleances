@@ -13,6 +13,7 @@ Principe validé :
 Lancer :  uv run python analyse/simulation_graph.py
 """
 import json
+import math
 from collections import Counter, defaultdict, deque
 from pathlib import Path
 
@@ -219,6 +220,44 @@ def _figure(focus):
     return fig
 
 
+def _figure_apercu(racines):
+    """Vue d'ensemble : chaque arbre = un point (sa racine), sans arêtes.
+    Taille = détections, couleur = type. Spirale phyllotaxique : les plus gros
+    thèmes au centre, étalement régulier, déterministe."""
+    ordre = sorted(racines, key=_rec, reverse=True)          # gros au centre
+    angle = math.pi * (3 - math.sqrt(5))                     # angle d'or
+    pos = {r: (math.sqrt(i) * math.cos(i * angle), math.sqrt(i) * math.sin(i * angle))
+           for i, r in enumerate(ordre)}
+    seuil = sorted((_rec(r) for r in racines), reverse=True)[:25][-1] if len(racines) > 25 else 0
+
+    traces = []
+    for typ in ORDRE_TYPE:
+        ns = [r for r in racines if _type(r) == typ]
+        if not ns:
+            continue
+        traces.append(go.Scatter(
+            x=[pos[n][0] for n in ns], y=[pos[n][1] for n in ns],
+            mode="markers+text",
+            text=[(n[:22] + "…" if len(n) > 22 else n) if _rec(n) >= seuil else "" for n in ns],
+            textposition="top center", textfont=dict(size=9, color="#334155"),
+            name=typ,
+            hovertext=[f"{n}<br>{_type(n)} · {_rec(n)} détections" for n in ns],
+            hoverinfo="text",
+            marker=dict(size=[6 + min(_rec(n), 42) for n in ns], color=COULEUR[typ],
+                        line=dict(width=1, color="#ffffff")),
+        ))
+    fig = go.Figure(traces)
+    fig.update_layout(
+        showlegend=True,
+        legend=dict(orientation="v", xanchor="right", x=1, yanchor="bottom", y=0,
+                    bgcolor="rgba(255,255,255,0.75)", bordercolor="#e5e7eb", borderwidth=1),
+        xaxis=dict(visible=False), yaxis=dict(visible=False),
+        paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
+        margin=dict(l=10, r=10, t=10, b=10), height=560,
+    )
+    return fig
+
+
 def _description(nom):
     """Bloc gauche : identité + description, identique quel que soit le type."""
     t = by_name[nom]
@@ -257,14 +296,31 @@ BANNIERE = (
 )
 
 ROOTS = [root for _, root in arbres]            # racines d'arbres, triées par détections
-DEFAULT_ROOT = ROOTS[0]
+APERCU = "— Vue d'ensemble —"                    # sentinel : carte de tous les arbres
 
 
 def _kids(n):
     return sorted(enfants[n], key=_rec, reverse=True)
 
 
+def _apercu_md():
+    return (
+        f"### Vue d'ensemble\n"
+        f"**{len(ROOTS)} arbres thématiques**, {len(propre)} topics propres.\n\n"
+        f"Chaque point = un arbre (sa racine). **Taille** = nombre de détections, "
+        f"**couleur** = type. Sélectionne une racine dans le menu pour explorer son arbre."
+    )
+
+
 def on_racine(root):
+    if not root or root == APERCU:               # retour à la carte d'ensemble
+        return (
+            _figure_apercu(ROOTS),
+            gr.update(choices=[], value=None, label="Grand-parent"),
+            gr.update(choices=[], value=None, label="Parent"),
+            gr.update(choices=[], value=None, label="Enfant · topic"),
+            _apercu_md(), "", None,
+        )
     return (
         _figure(root),
         gr.update(choices=_kids(root), value=None, label="Grand-parent"),
@@ -275,8 +331,8 @@ def on_racine(root):
 
 
 def on_gp(node, focus):
-    if not node:                                       # reset programmatique : no-op
-        return _figure(focus), gr.update(), gr.update(), _description(focus), _occurrences(focus), focus
+    if not node:                                       # reset programmatique : on ne touche à rien
+        return gr.update(), gr.update(), gr.update(), gr.update(), gr.update(), focus
     return (
         _figure(node),
         gr.update(choices=_kids(node), value=None, label="Parent"),
@@ -287,7 +343,7 @@ def on_gp(node, focus):
 
 def on_parent(node, focus):
     if not node:
-        return _figure(focus), gr.update(), _description(focus), _occurrences(focus), focus
+        return gr.update(), gr.update(), gr.update(), gr.update(), focus
     return (
         _figure(node),
         gr.update(choices=_kids(node), value=None, label="Enfant · topic"),
@@ -296,8 +352,9 @@ def on_parent(node, focus):
 
 
 def on_enfant(node, focus):
-    cible = node or focus
-    return _figure(cible), _description(cible), _occurrences(cible), cible
+    if not node:
+        return gr.update(), gr.update(), gr.update(), focus
+    return _figure(node), _description(node), _occurrences(node), node
 
 
 with gr.Blocks(title="Doléances — thèmes") as demo:
@@ -306,7 +363,7 @@ with gr.Blocks(title="Doléances — thèmes") as demo:
 
     # ── sélection à 4 niveaux, en haut (sans stats : elles sont dans le panneau) ──
     with gr.Row():
-        racine_dd = gr.Dropdown(ROOTS, value=DEFAULT_ROOT, label="Racine · arbre",
+        racine_dd = gr.Dropdown([APERCU] + ROOTS, value=APERCU, label="Racine · arbre",
                                 filterable=True, scale=1)
         gp_dd = gr.Dropdown(label="Grand-parent", filterable=True, scale=1)
         parent_dd = gr.Dropdown(label="Parent", filterable=True, scale=1)
