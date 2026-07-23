@@ -113,13 +113,22 @@ def _est_pliable(n):
     return len(enfants[n]) > 0
 
 
-def _fil(focus):
-    """Chemin racine › … › focus."""
-    chaine, cur = [], focus
-    while cur:
-        chaine.append(cur)
-        cur = parent_de.get(cur)
-    return " › ".join(f"{n[:28]}" for n in reversed(chaine))
+_hauteur_memo = {}
+
+
+def _hauteur(n):
+    """Hauteur au-dessus des feuilles (0 = feuille)."""
+    if n in _hauteur_memo:
+        return _hauteur_memo[n]
+    h = 0 if not enfants[n] else 1 + max(_hauteur(c) for c in enfants[n])
+    _hauteur_memo[n] = h
+    return h
+
+
+def _type(n):
+    """Rôle structurel, vocabulaire de la réunion (au lieu du level numérique)."""
+    h = _hauteur(n)
+    return "enfant" if h == 0 else "parent" if h == 1 else "grand-parent"
 
 
 # ──── voisinage (focus + rayon 2) ───
@@ -195,22 +204,40 @@ def _figure(focus):
     return fig
 
 
-def _details(nom):
+def _description(nom):
+    """Bloc gauche : identité + description, identique quel que soit le type."""
     t = by_name[nom]
-    tete = (
+    sous = f"{len(enfants[nom])} sous-thèmes" if enfants[nom] else "aucun sous-thème (feuille)"
+    return (
         f"### {nom}\n"
-        f"`level {t['level']}` · validé : {'oui' if t['validated'] else 'non'} · "
-        f"{len(enfants[nom])} sous-thèmes\n\n"
-        f"**Parent** : {t['parent'] or '— (racine)'}\n\n"
+        f"**Type** : {_type(nom)} · **Parent** : {t['parent'] or '— (racine)'} · {sous}\n\n"
         f"**Détections** : {_rec(nom)} au total · {own.get(nom, 0)} sur ce topic\n\n"
-        f"{t['description']}\n\n---\n#### Occurrences dans les textes\n"
+        f"{t['description']}"
     )
+
+
+def _occurrences(nom):
+    """Bloc droit : où ce topic apparaît dans les textes citoyens."""
     lignes = []
-    for doc_id, rationale, extract in occ.get(nom, [])[:5]:
+    for doc_id, rationale, extract in occ.get(nom, [])[:8]:
         literal = extract[:40] in content.get(doc_id, "")
         cite = f"« {extract.strip()} »" if literal else f"*(reformulé)* {extract.strip()}"
         lignes.append(f"> {cite}\n>\n> — doc {doc_id} · {rationale}")
-    return tete + ("\n\n".join(lignes) if lignes else "*Aucune occurrence directe sur ce topic.*")
+    corps = "\n\n".join(lignes) if lignes else (
+        "*Ce thème regroupe des sous-thèmes ; les occurrences sont sur les topics feuilles.*"
+        if enfants[nom] else "*Aucune occurrence sur ce topic.*"
+    )
+    return f"#### Occurrences dans les textes\n{corps}"
+
+
+def _feuilles(n):
+    """Topics feuilles (enfants) sous un nœud."""
+    if not enfants[n]:
+        return [n]
+    out = []
+    for c in enfants[n]:
+        out.extend(_feuilles(c))
+    return out
 
 
 #  interface
@@ -220,57 +247,68 @@ BANNIERE = (
     f"**{len(propre)} topics propres** ({round(100 * sum(own.get(n, 0) for n in propre) / TOTAL_INST)} % "
     f"des détections) · {len(topics) - len(propre)} topics hors périmètre · "
     f"{len(LABELS)} arbres thématiques\n\n"
-    f"*Navigation : choisis un sous-thème pour **déplier**, remonte d'un clic. "
-    f"Le graphe ne montre qu'un niveau à la fois — c'est ce qui le rend lisible.*"
+    f"*Sélection en fil d'Ariane : **grand-parent** (arbre) → **parent** (sous-thème) → **topic**.*"
 )
 
+GP_CHOICES = [(lbl, RACINE[lbl]) for lbl in LABELS]
+DEFAULT_ROOT = RACINE[LABELS[0]]
 
-def _render(focus):
-    kids = sorted(enfants[focus], key=_rec, reverse=True)
-    choix = [f"{'▸ ' if _est_pliable(k) else ''}{k}" for k in kids]
+
+def on_grandparent(root):
+    kids = sorted(enfants[root], key=_rec, reverse=True)
+    pchoices = [(f"{k} · {_rec(k)} détections", k) for k in kids]
     return (
-        _figure(focus),
-        f"**Vous êtes ici :** {_fil(focus)}",
-        gr.update(choices=choix, value=None,
-                  label=f"Déplier un sous-thème ({len(kids)})" if kids else "Aucun sous-thème"),
-        _details(focus),
-        focus,
+        _figure(root),
+        gr.update(choices=pchoices, value=None, label=f"Parent · sous-thème ({len(kids)})"),
+        gr.update(choices=[], value=None, label="Topic"),
+        _description(root), _occurrences(root), root,
     )
 
 
-def on_arbre(label):
-    return _render(RACINE[label])
+def on_parent(parent, focus):
+    if not parent:                                    # reset programmatique : no-op
+        return _figure(focus), gr.update(), _description(focus), _occurrences(focus), focus
+    leaves = sorted(_feuilles(parent), key=_rec, reverse=True)
+    tchoices = [(f"{lf} · {_rec(lf)} détections", lf) for lf in leaves]
+    return (
+        _figure(parent),
+        gr.update(choices=tchoices, value=None, label=f"Topic ({len(leaves)})"),
+        _description(parent), _occurrences(parent), parent,
+    )
 
 
-def on_descendre(choix, focus):
-    if not choix:
-        return _render(focus)
-    return _render(choix[2:] if choix.startswith("▸ ") else choix)
-
-
-def on_remonter(focus):
-    return _render(parent_de.get(focus, focus))
+def on_topic(topic, focus):
+    cible = topic or focus
+    return _figure(cible), _description(cible), _occurrences(cible), cible
 
 
 with gr.Blocks(title="Doléances — thèmes") as demo:
     gr.Markdown(BANNIERE)
     focus_state = gr.State()
+
+    # ── sélection fil d'Ariane à 3 niveaux, en haut ──
+    with gr.Row():
+        gp = gr.Dropdown(GP_CHOICES, value=DEFAULT_ROOT, label="Grand-parent · arbre",
+                         filterable=True, scale=1)
+        parent_dd = gr.Dropdown(label="Parent · sous-thème", filterable=True, scale=1)
+        topic_dd = gr.Dropdown(label="Topic", filterable=True, scale=1)
+
+    # ── graphe à gauche, détails (description + occurrences) à droite ──
     with gr.Row():
         with gr.Column(scale=2):
-            arbre = gr.Dropdown(LABELS, value=LABELS[0], label="Arbre thématique", filterable=True)
-            fil = gr.Markdown()
             plot = gr.Plot()
-            with gr.Row():
-                remonter = gr.Button("⬆ Remonter au parent")
-                descendre = gr.Dropdown(label="Déplier un sous-thème", filterable=True, scale=3)
         with gr.Column(scale=1):
-            details = gr.Markdown()
+            description = gr.Markdown()
+            occurrences = gr.Markdown()
 
-    sorties = [plot, fil, descendre, details, focus_state]
-    arbre.change(on_arbre, arbre, sorties)
-    descendre.change(on_descendre, [descendre, focus_state], sorties)
-    remonter.click(on_remonter, focus_state, sorties)
-    demo.load(on_arbre, arbre, sorties)
+    gp.change(on_grandparent, gp,
+              [plot, parent_dd, topic_dd, description, occurrences, focus_state])
+    parent_dd.change(on_parent, [parent_dd, focus_state],
+                     [plot, topic_dd, description, occurrences, focus_state])
+    topic_dd.change(on_topic, [topic_dd, focus_state],
+                    [plot, description, occurrences, focus_state])
+    demo.load(on_grandparent, gp,
+              [plot, parent_dd, topic_dd, description, occurrences, focus_state])
 
 
 if __name__ == "__main__":
