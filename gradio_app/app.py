@@ -2,7 +2,7 @@ from pathlib import Path
 
 import gradio as gr
 from data_helpers import PDF_DIR
-from views import commune, graph, topic
+from views import commune, topic
 
 STYLE = Path(__file__).parent / "views" / "style.css"
 
@@ -14,8 +14,6 @@ with gr.Blocks(title="Cahiers de doléances", theme=gr.themes.Soft(),
         load_fn, load_outputs = commune.render()
     with gr.Tab("Par topic"):
         topic.render()
-    with gr.Tab("Graphe"):
-        graph.render()
 
     # l'affichage initial de la vue commune : événement du niveau application
     demo.load(load_fn, None, load_outputs)

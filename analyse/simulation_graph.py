@@ -1,17 +1,3 @@
-"""Simulation Gradio — vue graphe des topics de JB (POC, lit les fichiers bruts).
-
-Principe validé :
-- filtre qualité : on écarte doublons de noms, isolés et cycles (86 % des
-  détections conservées) — filtre de VUE, on ne modifie pas la donnée ;
-- on n'affiche JAMAIS tout l'arbre (288 nœuds = illisible) : navigation par
-  FOCUS + DÉPLIAGE. La vue montre le voisinage du nœud courant (profondeur 2,
-  plafonné) ; on descend en choisissant un sous-thème, on remonte d'un bouton ;
-- spatialisation Fruchterman-Reingold (force-directed, façon Gephi) via
-  networkx.spring_layout, focus ancré au centre ;
-- graphe à gauche, panneau détail à droite (description, occurrences).
-
-Lancer :  uv run python analyse/simulation_graph.py
-"""
 import json
 import math
 from collections import Counter, defaultdict, deque
@@ -375,22 +361,6 @@ def roots_for(filtre):
     return [r for r in ROOTS if _hauteur(r) >= PROF_MIN.get(filtre, 3)]
 
 
-N_COMPLETS = len(roots_for(PROF_CHOIX[0]))
-DET_COMPLETS = sum(_rec(r) for r in roots_for(PROF_CHOIX[0]))
-
-BANNIERE = (
-    f"### Cahiers de doléances — exploration des thèmes (POC)\n"
-    f"**{len(docs)} documents analysés sur {len(df)}** · "
-    f"**{N_COMPLETS} arbres complets** affichés par défaut "
-    f"({round(100 * DET_COMPLETS / TOTAL_INST)} % des détections) · "
-    f"{len(ROOTS) - N_COMPLETS} arbres en cours de structuration, accessibles via le "
-    f"filtre Profondeur\n\n"
-    f"*Topics **propres** = reliés et sans cycle ({len(propre)}) · arbres **complets** = "
-    f"les 4 niveaux racine → grand-parent → parent → enfant. "
-    f"La couleur d'un nœud dit toujours son type (légende du graphe).*"
-)
-
-
 def _kids(n):
     return sorted(enfants[n], key=_rec, reverse=True)
 
@@ -400,11 +370,13 @@ def _apercu_md(filtre):
     dets = sum(_rec(r) for r in rs)
     return (
         f"### Vue d'ensemble — {filtre.lower()}\n"
-        f"**{len(rs)} arbres** · {dets} détections "
-        f"(**{round(100 * dets / TOTAL_INST)} %** du total).\n\n"
-        f"Le graphe montre le **squelette** : racines, grands-parents et parents, reliés. "
-        f"Les topics feuilles apparaissent au zoom. **Taille** = détections agrégées, "
+        f"**{len(rs)} arbres · {dets} détections** ({round(100 * dets / TOTAL_INST)} % du total) · "
+        f"{len(docs)} documents analysés sur {len(df)}\n\n"
+        f"Le graphe montre le **squelette** (racines, grands-parents, parents reliés) ; "
+        f"les topics feuilles apparaissent au zoom. **Taille** = détections agrégées, "
         f"**couleur** = type.\n\n"
+        f"*Arbre complet = les 4 niveaux racine → grand-parent → parent → enfant. "
+        f"Les arbres moins profonds restent accessibles via le filtre Profondeur.*\n\n"
         f"Sélectionne une racine pour explorer son arbre."
     )
 
@@ -467,7 +439,7 @@ def on_enfant(node, focus):
 
 
 with gr.Blocks(title="Doléances — thèmes") as demo:
-    gr.Markdown(BANNIERE)
+    gr.Markdown("# Cahiers de doléances vue topic (POC)")
     focus_state = gr.State()
 
     # filtre Profondeur + sélection à 4 niveaux, en haut
