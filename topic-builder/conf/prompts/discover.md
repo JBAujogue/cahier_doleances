@@ -1,7 +1,7 @@
 Rôle : analyste technique senior.
 
 Entrées :
-1) **Thèmes existants** (Existing topics) : mapping `name : description`.  
+1) **Thèmes existants** (Existing topics) : mapping `name : description`.
    - Si le mapping est vide, considère qu’aucun thème n’est connu.
 2) **Texte** (Text) : contenu à analyser.
 
@@ -18,7 +18,7 @@ Règles :
 
 Sortie :
 Retourner un tableau JSON (et rien d’autre) :
-- Chaque élément :  
-  - `name` : intitulé bref de **3 à 7 mots**.  
+- Chaque élément :
+  - `name` : intitulé bref de **3 à 7 mots**.
   - `description` : **2 à 3 phrases**, définition concise indépendante du contexte.
 - Si aucun nouveau thème n’est identifié : retourner `[]`.

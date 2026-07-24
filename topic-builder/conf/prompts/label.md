@@ -8,7 +8,7 @@ Objectif :
 Repérer, parmi **les thèmes existants uniquement**, ceux qui sont **traités de manière significative** dans le texte.
 
 Contraintes :
-- Ne sélectionner **que** des thèmes dont le texte parle **en profondeur** (développés, argumentés, détaillés).  
+- Ne sélectionner **que** des thèmes dont le texte parle **en profondeur** (développés, argumentés, détaillés).
   → Exclure les mentions rapides, allusions, listes non expliquées.
 - Ne jamais inventer de thème ni modifier un nom : `name` doit correspondre **exactement** à `Thèmes existants[i].name`.
 - Pour chaque thème retenu, fournir une **preuve textuelle** via une citation exacte.

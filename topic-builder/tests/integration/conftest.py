@@ -297,7 +297,7 @@ class _MockVllmHandler(BaseHTTPRequestHandler):
     Minimal HTTP handler that dispatches a response based on the requested tool name.
     """
 
-    def do_POST(self) -> None:
+    def do_POST(self) -> None:  # noqa: N802
         """
         Return the appropriate mock payload based on the tool_choice function name.
         """
