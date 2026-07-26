@@ -76,7 +76,7 @@ uv run topicbuilder screen \
 
 **Output — dataset CSV** (`--output-path`):
 
-```
+```csv
 id,content
 docs/intro.md,"This document covers..."
 docs/sub/guide.txt,"Step-by-step instructions..."
@@ -86,9 +86,12 @@ docs/sub/guide.txt,"Step-by-step instructions..."
 
 ### 🔍 Discover new topics
 
-Identify new topics across a dataset CSV, and append them to an existing topics config if passed.
-All documents are processed concurrently.
-**Note**: The topics config is appended to each LLM call, which can quickly consume the full window context if the config is large.
+Identify new topics across a dataset CSV, and append them to an existing topics config if passed. The prompt describing the task is located at `conf/prompts/discover.md` and is formated to generate outputs through function calling.
+
+Notes:
+
+- All documents are processed concurrently.
+- The topics config is appended to each LLM call, which can quickly consume the full window context if the config is large.
 
 <details>
 <summary>Flow</summary>
@@ -104,7 +107,8 @@ flowchart TD
     F --> G([Write updated\ntopics config])
 ```
 
-</details><br>
+</details>
+</br>
 
 **Command:**
 
@@ -152,7 +156,8 @@ uv run topicbuilder discover \
 
 ### 🪛 Factorize existing topics
 
-Merge near-duplicate topics into an existing target topic, when this latter is a good representative of a group of topics. The prompt for this task is located at `conf/prompts/discover.md`.
+Merge near-duplicate topics into an existing target topic, when this latter is a good representative of a group of topics. The prompts describing the task are located at `conf/prompts/factorize`: one for generating cadidates of grouped topics, and another to clean each candidate group and selecting the target topic that will replace the others. Prompts are formated to generate outputs through function calling.
+
 The merge pipeline consists in 3 steps:
 
 1. **Topic pre-clustering** — topics are chunked into clusters of topics using some heuristic.
@@ -215,7 +220,8 @@ uv run topicbuilder factorize \
 
 ### 🌳 Structure topics into a hierarchy
 
-Group parentless topics under new parent meta-topics.
+Group parentless topics under new parent meta-topics. The prompts describing the task are located at `conf/prompts/structure`: one for generating cadidates of grouped topics, and another to clean each candidate group by creating a parent topic for the group. Prompts are formated to generate outputs through function calling.
+
 The structuring pipeline runs per level. Within each level, parentless topics are chunked and processed in two LLM steps per chunk:
 
 1. **Topic pre-clustering** — topics are chunked into clusters of topics using some heuristic.
@@ -301,7 +307,9 @@ uv run topicbuilder structure \
 
 ### 🏷️ Label text using topics
 
-Label each document in a dataset CSV using a topics config. All documents are processed concurrently and results are keyed by document id. Both the texts and the taxonomy are chunked in order to make the labelling scallable.
+Label each document in a dataset CSV using a topics config. The prompt describing the task is located at `conf/prompts/label.md` and is formated to generate outputs through function calling.
+
+All documents are processed concurrently and results are keyed by document id. Both the texts and the taxonomy are chunked in order to make the labelling scallable.
 
 Notes:
 
