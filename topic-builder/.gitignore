@@ -6,6 +6,3 @@
 *.egg-info
 
 __pycache__/
-
-!/tests/data
-!/data

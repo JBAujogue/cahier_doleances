@@ -8,9 +8,9 @@ Run with:
 import sys
 import traceback
 
-from tests.integration import discover, factorize, label
+from tests.integration import discover_topics, factorize, label
 
-TESTS = [discover, factorize, label]
+TESTS = [discover_topics, factorize, label]
 
 
 def run() -> None:

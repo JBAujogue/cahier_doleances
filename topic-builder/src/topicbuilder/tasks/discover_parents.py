@@ -6,7 +6,7 @@ from pydantic import BaseModel
 from topicbuilder.core.client import LLMClient, parse_tool_arguments
 from topicbuilder.core.clustering import clusterize_taxonomy_by_level, most_similar_topic
 from topicbuilder.core.io import read_taxonomy, read_text, write_json
-from topicbuilder.core.schemas import ParentAddition, ParentCandidate, StructureReport, Taxonomy, Topic
+from topicbuilder.core.schemas import ParentAddition, ParentCandidate, ParentDiscoveryReport, Taxonomy, Topic
 from topicbuilder.core.taxonomy import check_taxonomy, display_duplicates, format_violations, sanitize_taxonomy
 
 PARENT_GENERATION_TOOL: dict = {
@@ -67,7 +67,7 @@ class ParentValidationArgs(BaseModel):
     children: list[str]
 
 
-def structure(
+def discover_parents(
     taxonomy_path: Path = typer.Option(
         ...,
         "--taxonomy-path",
@@ -81,7 +81,7 @@ def structure(
         help="Path to the LLM client config YAML.",
     ),
     prompts_dir: Path = typer.Option(
-        Path("conf/prompts/structure"),
+        Path("conf/prompts/discover_parents"),
         "--prompts-dir",
         exists=True,
         help="Directory containing the structure prompt files.",
@@ -122,7 +122,7 @@ def structure(
     taxonomy = insert_parents(taxonomy, additions)
 
     # checks and report
-    report = StructureReport(parents_added=additions)
+    report = ParentDiscoveryReport(parents_added=additions)
     checks = check_taxonomy(taxonomy)
     if checks.has_violations():
         typer.echo(format_violations(checks), err=True)

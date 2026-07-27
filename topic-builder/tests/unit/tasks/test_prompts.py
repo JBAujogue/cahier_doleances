@@ -2,39 +2,39 @@ from pathlib import Path
 
 import pytest
 
-from topicbuilder.tasks.discover import DISCOVER_TOOL
+from topicbuilder.tasks.discover_parents import PARENT_GENERATION_TOOL, PARENT_VALIDATION_TOOL
+from topicbuilder.tasks.discover_topics import DISCOVER_TOPICS_TOOL
 from topicbuilder.tasks.factorize import MERGE_GENERATION_TOOL, MERGE_VALIDATION_TOOL
 from topicbuilder.tasks.label import LABEL_TOOL
-from topicbuilder.tasks.structure import PARENT_GENERATION_TOOL, PARENT_VALIDATION_TOOL
 
 PROMPTS_DIR = Path(__file__).resolve().parents[3] / "conf" / "prompts"
 FACTORIZE_PROMPTS_DIR = PROMPTS_DIR / "factorize"
-STRUCTURE_PROMPTS_DIR = PROMPTS_DIR / "structure"
+DISCOVER_PARENTS_PROMPTS_DIR = PROMPTS_DIR / "discover_parents"
 
 
-def test_discover_prompt_is_non_empty_string():
-    content = (PROMPTS_DIR / "discover.md").read_text(encoding="utf-8")
+def test_discover_topics_prompt_is_non_empty_string():
+    content = (PROMPTS_DIR / "discover_topics.md").read_text(encoding="utf-8")
     assert isinstance(content, str) and len(content) > 0
 
 
 @pytest.mark.parametrize("keyword", ["name", "description"])
-def test_discover_prompt_mentions_required_fields(keyword: str):
-    content = (PROMPTS_DIR / "discover.md").read_text(encoding="utf-8")
+def test_discover_topics_prompt_mentions_required_fields(keyword: str):
+    content = (PROMPTS_DIR / "discover_topics.md").read_text(encoding="utf-8")
     assert keyword in content
 
 
-def test_discover_tool_function_name():
-    assert DISCOVER_TOOL["function"]["name"] == "record_new_topics"
+def test_discover_topics_tool_function_name():
+    assert DISCOVER_TOPICS_TOOL["function"]["name"] == "record_new_topics"
 
 
 @pytest.mark.parametrize("field", ["name", "description"])
-def test_discover_tool_schema_includes_field(field: str):
-    item_props = DISCOVER_TOOL["function"]["parameters"]["properties"]["topics"]["items"]["properties"]
+def test_discover_topics_tool_schema_includes_field(field: str):
+    item_props = DISCOVER_TOPICS_TOOL["function"]["parameters"]["properties"]["topics"]["items"]["properties"]
     assert field in item_props
 
 
-def test_discover_tool_schema_requires_topics_array():
-    params = DISCOVER_TOOL["function"]["parameters"]
+def test_discover_topics_tool_schema_requires_topics_array():
+    params = DISCOVER_TOPICS_TOOL["function"]["parameters"]
     assert "topics" in params["required"]
     assert params["properties"]["topics"]["type"] == "array"
 
@@ -78,19 +78,19 @@ def test_merge_tool_schema_includes_field(field: str):
 
 @pytest.mark.parametrize("filename", ["parent_generation.md", "parent_validation.md"])
 def test_structure_prompt_is_non_empty_string(filename: str):
-    content = (STRUCTURE_PROMPTS_DIR / filename).read_text(encoding="utf-8")
+    content = (DISCOVER_PARENTS_PROMPTS_DIR / filename).read_text(encoding="utf-8")
     assert isinstance(content, str) and len(content) > 0
 
 
 @pytest.mark.parametrize("keyword", ["parent", "children"])
 def test_structure_parent_generation_prompt_mentions_hierarchy_concept(keyword: str):
-    content = (STRUCTURE_PROMPTS_DIR / "parent_generation.md").read_text(encoding="utf-8")
+    content = (DISCOVER_PARENTS_PROMPTS_DIR / "parent_generation.md").read_text(encoding="utf-8")
     assert keyword.lower() in content.lower()
 
 
 @pytest.mark.parametrize("keyword", ["description", "children"])
 def test_structure_parent_validation_prompt_mentions_output_fields(keyword: str):
-    content = (STRUCTURE_PROMPTS_DIR / "parent_validation.md").read_text(encoding="utf-8")
+    content = (DISCOVER_PARENTS_PROMPTS_DIR / "parent_validation.md").read_text(encoding="utf-8")
     assert keyword in content
 
 

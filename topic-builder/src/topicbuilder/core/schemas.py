@@ -95,7 +95,7 @@ class FactorizeReport(BaseModel):
     merges: list[TopicMerge]
 
 
-class StructureReport(BaseModel):
+class ParentDiscoveryReport(BaseModel):
     """
     Change report produced by the structure task describing parent additions.
     """

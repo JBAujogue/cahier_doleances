@@ -7,7 +7,7 @@ from topicbuilder.core.schemas import (
     Label,
     LabeledDataset,
     ParentAddition,
-    StructureReport,
+    ParentDiscoveryReport,
     Taxonomy,
     Topic,
     TopicMerge,
@@ -168,7 +168,7 @@ def test_structure_report_stores_parents_added(structure_report):
 
 def test_structure_report_roundtrip(structure_report):
     raw = structure_report.model_dump()
-    result = StructureReport.model_validate(raw)
+    result = ParentDiscoveryReport.model_validate(raw)
     assert result == structure_report
 
 

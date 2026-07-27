@@ -1,8 +1,8 @@
 """
-Integration test for the `topicbuilder discover` subcommand.
+Integration test for the `topicbuilder discover_topics` subcommand.
 
 Run with:
-    python -m tests.integration.discover
+    python -m tests.integration.discover_topics
 """
 
 import json
@@ -11,7 +11,7 @@ from pathlib import Path
 
 import yaml
 
-from tests.integration.conftest import MOCK_DISCOVER_RESPONSE, MockVllmServer
+from tests.integration.conftest import MOCK_DISCOVER_TOPICS_RESPONSE, MockVllmServer
 from tests.integration.helpers import load_json, run_subcommand
 
 DATASET_PATH = Path(__file__).parent.parent / "data" / "dataset.csv"
@@ -21,15 +21,15 @@ PROMPTS_DIR = Path(__file__).resolve().parents[2] / "conf" / "prompts"
 
 def _expected_new_topics() -> list[dict]:
     """
-    Extract expected new topics from the mock discover response fixture.
+    Extract expected new topics from the mock discover_topics response fixture.
     """
-    args = json.loads(MOCK_DISCOVER_RESPONSE["choices"][0]["message"]["tool_calls"][0]["function"]["arguments"])
+    args = json.loads(MOCK_DISCOVER_TOPICS_RESPONSE["choices"][0]["message"]["tool_calls"][0]["function"]["arguments"])
     return args["topics"]
 
 
 def run() -> None:
     """
-    Start the mock vLLM server, invoke discover, and assert the output taxonomy is correct.
+    Start the mock vLLM server, invoke discover_topics, and assert the output taxonomy is correct.
     """
     server = MockVllmServer()
     server.start()
@@ -53,12 +53,12 @@ def run() -> None:
 
     try:
         result = run_subcommand(
-            "discover",
+            "discover-topics",
             {
                 "--dataset-path": str(DATASET_PATH),
                 "--taxonomy-path": str(TAXONOMY_PATH),
                 "--llm-config-path": str(llm_config_path),
-                "--prompt-path": str(PROMPTS_DIR / "discover.md"),
+                "--prompt-path": str(PROMPTS_DIR / "discover_topics.md"),
                 "--output-path": str(output_path),
             },
         )

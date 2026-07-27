@@ -12,8 +12,8 @@ CLI tool for topic modeling backed by a language model.
 - [2. Usage](#2-usage)
   - [Screen a directory into a dataset](#-screen-a-directory-into-a-dataset)
   - [Discover new topics](#-discover-new-topics)
+  - [Discover parent topics to form a hierarchy](#-discover-parent-topics-to-form-a-hierarchy)
   - [Factorize existing topics](#-factorize-existing-topics)
-  - [Structure topics into a hierarchy](#-structure-topics-into-a-hierarchy)
   - [Label text using topics](#️-label-text-using-topics)
   - [Display the knowledge graph](#️-display-the-knowledge-graph)
 - [3. Contribute](#3-contribute)
@@ -37,9 +37,35 @@ If necessary, you can set up a local `vllm` server with Docker Compose, see [`co
 
 ## 2. Usage
 
+<details>
+<summary>In a hurry ?</summary></br>
+
+To run a smoke test, run in a bash shell (linux) or in wsl (Windows)
+
+```shell
+docker compose -f conf/docker/docker-compose.qwen3-4b-instruct-fp8.yml up
+```
+
+Then run in a bash shell
+
+```shell
+data/sample/recipe.sh
+```
+
+On ce done, stop the LLM server (`ctrl + C`) and shut down the container
+
+```shell
+docker compose -f conf/docker/docker-compose.qwen3-4b-instruct-fp8.yml down
+```
+
+---
+
+</details>
+</br>
+
 In all commands requiring a LLM server, set the flag `--llm-config-path` pointing to the appropriate LLM client config, eg if `<my-server>.yaml` is running then use `--llm-config-path conf/clients/<my-server>.yaml`.
 
-###  📂 Screen a directory into a dataset
+### 📂 Screen a directory into a dataset
 
 Recursively collect all `.txt` and `.md` files under a directory and write them to a CSV dataset with `id` (file path) and `content` (file text) columns. This CSV is the input format expected by te tasks `discover` and `label`.
 
@@ -86,7 +112,7 @@ docs/sub/guide.txt,"Step-by-step instructions..."
 
 ### 🔍 Discover new topics
 
-Identify new topics across a dataset CSV, and append them to an existing topics config if passed. The prompt describing the task is located at `conf/prompts/discover.md` and is formated to generate outputs through function calling.
+Identify new topics across a dataset CSV, and append them to an existing topics config if passed. The prompt describing the task is located at `conf/prompts/discover_topics.md` and is formated to generate outputs through function calling.
 
 Notes:
 
@@ -113,7 +139,7 @@ flowchart TD
 **Command:**
 
 ```shell
-uv run topicbuilder discover [OPTIONS]
+uv run topicbuilder discover-topics [OPTIONS]
 ```
 
 | Option | Description |
@@ -122,13 +148,13 @@ uv run topicbuilder discover [OPTIONS]
 | `--taxonomy-path PATH` | *(optional)* Path to the existing taxonomy JSON. If omitted, starts from an empty taxonomy |
 | `--llm-config-path PATH` | Path to the LLM client config YAML |
 | `--output-path PATH` | Path where the updated taxonomy JSON will be written |
-| `--prompt-path PATH` | *(optional)* Path to the system prompt file *(default: `conf/prompts/discover.md`)* |
+| `--prompt-path PATH` | *(optional)* Path to the system prompt file *(default: `conf/prompts/discover_topics.md`)* |
 | `--chunk-max-words INT` | *(optional)* Max words per text chunk *(default: 500)* |
 
 **Example:**
 
 ```shell
-uv run topicbuilder discover \
+uv run topicbuilder discover-topics \
   --dataset-path data/sample/dataset.csv \
   --llm-config-path conf/clients/vllm-qwen3-4b-it-fp8.yaml \
   --output-path data/sample/analysis/taxonomy.json \
@@ -154,9 +180,97 @@ uv run topicbuilder discover \
 
 [Back to top](#topic-builder)
 
+### 🌳 Discover parent topics to form a hierarchy
+
+Group parentless topics under new parent meta-topics. The prompts describing the task are located at `conf/prompts/discover_parents`: one for generating cadidates of grouped topics, and another to clean each candidate group by creating a parent topic for the group. Prompts are formated to generate outputs through function calling.
+
+The structuring pipeline runs per level. Within each level, parentless topics are chunked and processed in two LLM steps per chunk:
+
+1. **Topic pre-clustering** — topics are chunked into clusters of topics using some heuristic.
+2. **Candidate generation** — given a chunk of topic names only, the model proposes parent names with candidate children.
+3. **Parent validation** — given the full name and description of each candidate group, the model confirms the parent name, writes a description, and selects the final subset of children.
+
+New parent topics are created at `level = children_level + 1`.
+
+Notes:
+
+- Topics with different levels cannot be parented together, only topics belonging to the same level can.
+- Topics with `"validated": true` are protected — they cannot be re-parented.
+
+<details>
+<summary>Flow</summary>
+
+```mermaid
+flowchart TD
+    A([structure]) --> B[Read taxonomy]
+    B --> C[Sanityze Taxonomy]
+    C --> D[Partition Taxonomy into chunks\nof at most chunk-size topics]
+    D --> E[Propose parent candidates\nper chunk]
+    E --> F[Validate parents\nper candidate group]
+    F --> G[Insert parents]
+    G --> H([Write structured taxonomy])
+    G --> I([Write change report])
+```
+
+</details>
+</br>
+
+**Command:**
+
+```shell
+uv run topicbuilder discover-parents [OPTIONS]
+```
+
+| Option | Description |
+| --- | --- |
+| `--taxonomy-path PATH` | Path to the taxonomy JSON to structure |
+| `--llm-config-path PATH` | Path to the LLM client config YAML |
+| `--output-path PATH` | Path where the structured taxonomy JSON will be written |
+| `--report-path PATH` | Path where the change report JSON will be written |
+| `--prompts-dir PATH` | *(optional)* Directory containing the structure prompt files *(default: `conf/prompts/discover_parents`)* |
+| `--chunk-size INT` | *(optional)* Max parentless topics per parent-generation chunk *(default: 500)* |
+
+**Example:**
+
+```shell
+uv run topicbuilder discover-parents \
+  --taxonomy-path data/sample/analysis/taxonomy_factorized.json \
+  --llm-config-path conf/clients/vllm-qwen3-4b-it-fp8.yaml \
+  --output-path data/sample/analysis/taxonomy_structured.json \
+  --report-path data/sample/analysis/report_structuration.json \
+  --chunk-size 500
+```
+
+**Output — structured taxonomy JSON** (`--output-path`):
+
+```json
+{
+  "topics": [
+    {
+      "id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+      "name": "Child topic",
+      "description": "Leaf concept definition.",
+      "parent": "b2c3d4e5-f6a7-8901-bcde-f12345678901",
+      "level": 0,
+      "validated": false
+    },
+    {
+      "id": "b2c3d4e5-f6a7-8901-bcde-f12345678901",
+      "name": "Parent meta-topic name",
+      "description": "Broader concept grouping related children.",
+      "parent": null,
+      "level": 1,
+      "validated": false
+    }
+  ]
+}
+```
+
+[Back to top](#topic-builder)
+
 ### 🪛 Factorize existing topics
 
-Merge near-duplicate topics into an existing target topic, when this latter is a good representative of a group of topics. The prompts describing the task are located at `conf/prompts/factorize`: one for generating cadidates of grouped topics, and another to clean each candidate group and selecting the target topic that will replace the others. Prompts are formated to generate outputs through function calling.
+Merge near-duplicate topics of identical level into an existing target topic of the same level, when this latter is a good representative of a group of topics. The prompts describing the task are located at `conf/prompts/factorize`: one for generating cadidates of grouped topics, and another to clean each candidate group and selecting the target topic that will replace the others. Prompts are formated to generate outputs through function calling.
 
 The merge pipeline consists in 3 steps:
 
@@ -215,93 +329,6 @@ uv run topicbuilder factorize \
 ```
 
 **Output — cleaned taxonomy JSON** (`--output-path`): same format as discover output.
-
-[Back to top](#topic-builder)
-
-### 🌳 Structure topics into a hierarchy
-
-Group parentless topics under new parent meta-topics. The prompts describing the task are located at `conf/prompts/structure`: one for generating cadidates of grouped topics, and another to clean each candidate group by creating a parent topic for the group. Prompts are formated to generate outputs through function calling.
-
-The structuring pipeline runs per level. Within each level, parentless topics are chunked and processed in two LLM steps per chunk:
-
-1. **Topic pre-clustering** — topics are chunked into clusters of topics using some heuristic.
-2. **Candidate generation** — given a chunk of topic names only, the model proposes parent names with candidate children.
-3. **Parent validation** — given the full name and description of each candidate group, the model confirms the parent name, writes a description, and selects the final subset of children.
-
-New parent topics are created at `level = children_level + 1`.
-
-Notes:
-
-- Topics with different levels cannot be parented together, only topics belonging to the same level can.
-- Topics with `"validated": true` are protected — they cannot be re-parented.
-
-<details>
-<summary>Flow</summary>
-
-```mermaid
-flowchart TD
-    A([structure]) --> B[Read taxonomy]
-    B --> C[Sanityze Taxonomy]
-    C --> D[Partition Taxonomy into chunks\nof at most chunk-size topics]
-    D --> E[Propose parent candidates\nper chunk]
-    E --> F[Validate parents\nper candidate group]
-    F --> G[Insert parents]
-    G --> H([Write structured taxonomy])
-    G --> I([Write change report])
-```
-
-</details><br>
-
-**Command:**
-
-```shell
-uv run topicbuilder structure [OPTIONS]
-```
-
-| Option | Description |
-| --- | --- |
-| `--taxonomy-path PATH` | Path to the taxonomy JSON to structure |
-| `--llm-config-path PATH` | Path to the LLM client config YAML |
-| `--output-path PATH` | Path where the structured taxonomy JSON will be written |
-| `--report-path PATH` | Path where the change report JSON will be written |
-| `--prompts-dir PATH` | *(optional)* Directory containing the structure prompt files *(default: `conf/prompts/structure`)* |
-| `--chunk-size INT` | *(optional)* Max parentless topics per parent-generation chunk *(default: 500)* |
-
-**Example:**
-
-```shell
-uv run topicbuilder structure \
-  --taxonomy-path data/sample/analysis/taxonomy_factorized.json \
-  --llm-config-path conf/clients/vllm-qwen3-4b-it-fp8.yaml \
-  --output-path data/sample/analysis/taxonomy_structured.json \
-  --report-path data/sample/analysis/report_structuration.json \
-  --chunk-size 500
-```
-
-**Output — structured taxonomy JSON** (`--output-path`):
-
-```json
-{
-  "topics": [
-    {
-      "id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
-      "name": "Child topic",
-      "description": "Leaf concept definition.",
-      "parent": "b2c3d4e5-f6a7-8901-bcde-f12345678901",
-      "level": 0,
-      "validated": false
-    },
-    {
-      "id": "b2c3d4e5-f6a7-8901-bcde-f12345678901",
-      "name": "Parent meta-topic name",
-      "description": "Broader concept grouping related children.",
-      "parent": null,
-      "level": 1,
-      "validated": false
-    }
-  ]
-}
-```
 
 [Back to top](#topic-builder)
 

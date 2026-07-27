@@ -4,7 +4,7 @@ from topicbuilder.core.schemas import (
     FactorizeReport,
     Label,
     ParentAddition,
-    StructureReport,
+    ParentDiscoveryReport,
     Taxonomy,
     Topic,
     TopicMerge,
@@ -66,8 +66,8 @@ def merge_report() -> FactorizeReport:
 
 
 @pytest.fixture
-def structure_report() -> StructureReport:
-    return StructureReport(
+def structure_report() -> ParentDiscoveryReport:
+    return ParentDiscoveryReport(
         parents_added=[
             ParentAddition(
                 parent=Topic(name="Earth Sciences", description=""),

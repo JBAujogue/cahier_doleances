@@ -6,7 +6,7 @@ import json
 import threading
 from http.server import BaseHTTPRequestHandler, HTTPServer
 
-MOCK_DISCOVER_RESPONSE: dict = {
+MOCK_DISCOVER_TOPICS_RESPONSE: dict = {
     "id": "chatcmpl-mock-build",
     "object": "chat.completion",
     "model": "mock-model",
@@ -282,7 +282,7 @@ MOCK_PARENT_RESPONSE: dict = {
 }
 
 _DISPATCH: dict[str, dict] = {
-    "record_new_topics": MOCK_DISCOVER_RESPONSE,
+    "record_new_topics": MOCK_DISCOVER_TOPICS_RESPONSE,
     "record_topic_cleanup": MOCK_CLEAN_RESPONSE,
     "record_labeled_topics": MOCK_FIND_RESPONSE,
     "propose_merge_candidates": MOCK_MERGE_CANDIDATES_RESPONSE,

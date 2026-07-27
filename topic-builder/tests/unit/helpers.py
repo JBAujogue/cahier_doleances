@@ -14,7 +14,7 @@ def _make_tool_response(tool_name: str, arguments: dict) -> SimpleNamespace:
     return SimpleNamespace(choices=[choice])
 
 
-def make_discover_response(topics: list[Topic]) -> SimpleNamespace:
+def make_discover_topics_response(topics: list[Topic]) -> SimpleNamespace:
     """
     Build a minimal fake OpenAI response carrying a record_new_topics tool call.
     """

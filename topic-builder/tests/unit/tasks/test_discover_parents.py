@@ -2,7 +2,7 @@ from unittest.mock import MagicMock
 
 from tests.unit.helpers import make_parent_candidates_response, make_parent_response
 from topicbuilder.core.schemas import ParentAddition, ParentCandidate, Taxonomy, Topic
-from topicbuilder.tasks.structure import (
+from topicbuilder.tasks.discover_parents import (
     PARENT_GENERATION_TOOL,
     PARENT_VALIDATION_TOOL,
     build_parent_generation_messages,

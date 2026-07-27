@@ -8,7 +8,7 @@ from topicbuilder.core.clustering import chunk_text
 from topicbuilder.core.io import read_dataset, read_taxonomy, read_text, write_json
 from topicbuilder.core.schemas import Taxonomy, Topic
 
-DISCOVER_TOOL: dict = {
+DISCOVER_TOPICS_TOOL: dict = {
     "type": "function",
     "function": {
         "name": "record_new_topics",
@@ -34,7 +34,7 @@ DISCOVER_TOOL: dict = {
 }
 
 
-def discover(
+def discover_topics(
     dataset_path: Path = typer.Option(
         ...,
         "--dataset-path",
@@ -54,7 +54,7 @@ def discover(
         help="Path to the LLM client config YAML.",
     ),
     prompt_path: Path = typer.Option(
-        Path("conf/prompts/discover.md"),
+        Path("conf/prompts/discover_topics.md"),
         "--prompt-path",
         exists=True,
         help="Path to the markdown system prompt file.",
@@ -86,7 +86,7 @@ def discover(
 
     # discover new topics
     ref_taxonomy = read_taxonomy(taxonomy_path) if taxonomy_path else Taxonomy(topics=[])
-    new_taxonomy = discover_topics(chunks, ref_taxonomy, client, prompt)
+    new_taxonomy = discover_leaf_topics(chunks, ref_taxonomy, client, prompt)
 
     # save and log
     write_json(new_taxonomy, output_path)
@@ -95,14 +95,14 @@ def discover(
     return
 
 
-def discover_topics(texts: list[str], taxonomy: Taxonomy, client: LLMClient, prompt: str) -> Taxonomy:
+def discover_leaf_topics(texts: list[str], taxonomy: Taxonomy, client: LLMClient, prompt: str) -> Taxonomy:
     """
     Send all texts to the LLM concurrently, collect discovered topics, and return a deduplicated merged taxonomy.
     """
     inputs = [build_messages(text, taxonomy, prompt) for text in texts]
     responses = client(
         inputs=inputs,
-        tools=[DISCOVER_TOOL],
+        tools=[DISCOVER_TOPICS_TOOL],
         tool_choice={"type": "function", "function": {"name": "record_new_topics"}},
     )
     existing_names = {t.name for t in taxonomy.topics}
